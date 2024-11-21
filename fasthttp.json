@@ -1,6 +1,7 @@
 {
   "user": "nobody",
   "group": "nobody",
+  "serverAdmin": "root@localhost",
   "listen": [
     "80",
     "443"
@@ -18,7 +19,13 @@
       "serverName": "wordpress.demo.adminbolt.com",
       "documentRoot": "/home/word2442we7v/public_html",
       "user": "word2442we7v",
-      "group": "word2442we7v"
+      "group": "word2442we7v",
+      "files": [
+        {
+          "regex": "\\.php$",
+          "handler": "proxy:fcgi://127.0.0.1:9076"
+        }
+      ]
     },
     {
       "listen": "80",
