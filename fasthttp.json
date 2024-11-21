@@ -2,20 +2,18 @@
   "user": "nobody",
   "group": "nobody",
   "serverAdmin": "root@localhost",
-  "listen": [
-    "80",
-    "443"
-  ],
+  "httpPort": "80",
+  "httpsPort": "443",
   "virtualHosts": [
     {
-      "listen": "80",
+      "portType": "http",
       "serverName": "adminbolt.com",
       "documentRoot": "/var/www/html",
       "user": "adminbolt",
       "group": "adminbolt"
     },
     {
-      "listen": "80",
+      "portType": "http",
       "serverName": "wordpress.demo.adminbolt.com",
       "documentRoot": "/home/word2442we7v/public_html",
       "user": "word2442we7v",
@@ -28,7 +26,7 @@
       ]
     },
     {
-      "listen": "80",
+      "portType": "http",
       "serverName": "vasil-levski.demo.adminbolt.com",
       "documentRoot": "/home/vasi96970cxn/public_html",
       "user": "vasi96970cxn",
