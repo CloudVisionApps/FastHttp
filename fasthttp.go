@@ -17,8 +17,11 @@ func main() {
 		Addr: ":80",
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-			fmt.Fprintf(w, "Hello, %q! Host: %s", html.EscapeString(r.URL.Path),html.EscapeString(r.Host))
+			fmt.Fprintf(w, "Hello, %q! Host: %s", html.EscapeString(r.URL.Path))
 			log.Printf("Request from %s", r.RemoteAddr)
+
+            log.Printf("Host: %s", html.EscapeString(r.Host))
+
 		}),
 	}
 
