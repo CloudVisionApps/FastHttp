@@ -4,6 +4,108 @@
   "serverAdmin": "root@localhost",
   "httpPort": "80",
   "httpsPort": "443",
+  "mimeTypes": [
+    {
+      "ext": "html",
+      "type": "text/html"
+    },
+    {
+      "ext": "htm",
+      "type": "text/html"
+    },
+    {
+      "ext": "css",
+      "type": "text/css"
+    },
+    {
+      "ext": "js",
+      "type": "application/javascript"
+    },
+    {
+      "ext": "json",
+      "type": "application/json"
+    },
+    {
+      "ext": "xml",
+      "type": "application/xml"
+    },
+    {
+      "ext": "jpeg",
+      "type": "image/jpeg"
+    },
+    {
+      "ext": "jpg",
+      "type": "image/jpeg"
+    },
+    {
+      "ext": "png",
+      "type": "image/png"
+    },
+    {
+      "ext": "gif",
+      "type": "image/gif"
+    },
+    {
+      "ext": "svg",
+      "type": "image/svg+xml"
+    },
+    {
+      "ext": "ico",
+      "type": "image/x-icon"
+    },
+    {
+      "ext": "mp4",
+      "type": "video/mp4"
+    },
+    {
+      "ext": "webm",
+      "type": "video/webm"
+    },
+    {
+      "ext": "ogg",
+      "type": "video/ogg"
+    },
+    {
+      "ext": "pdf",
+      "type": "application/pdf"
+    },
+    {
+      "ext": "zip",
+      "type": "application/zip"
+    },
+    {
+      "ext": "rar",
+      "type": "application/x-rar-compressed"
+    },
+    {
+      "ext": "tar",
+      "type": "application/x-tar"
+    },
+    {
+      "ext": "gz",
+      "type": "application/gzip"
+    },
+    {
+      "ext": "bz2",
+      "type": "application/x-bzip2"
+    },
+    {
+      "ext": "mp3",
+      "type": "audio/mpeg"
+    },
+    {
+      "ext": "wav",
+      "type": "audio/wav"
+    },
+    {
+      "ext": "ogg",
+      "type": "audio/ogg"
+    },
+    {
+      "ext": "flac",
+      "type": "audio/flac"
+    }
+  ],
   "virtualHosts": [
     {
       "portType": "http",

@@ -7,10 +7,10 @@ import (
 	"html"
 	"log"
 	"net/http"
-	"io/ioutil"
+// 	"io/ioutil"
 	"os"
 	"os/signal"
-// 	"strings"
+	"strings"
 	"syscall"
 	"time"
 	"github.com/yookoala/gofast"
@@ -31,6 +31,10 @@ type FastHTTPVirtualHost struct {
     PHPProxyFCGI string `json:"phpProxyFCGI"`
 }
 
+type FastHTTPMimeType struct {
+    Ext string `json:"ext"`
+    Type string `json:"type"`
+}
 type FastHTTPConfig struct {
 	User  string `json:"user"`
 	Group string `json:"group"`
@@ -39,6 +43,7 @@ type FastHTTPConfig struct {
 	VirtualHosts []FastHTTPVirtualHost `json:"virtualHosts"`
 	HttpPort string `json:"httpPort"`
 	HttpsPort string `json:"httpsPort"`
+	MimeTypes []FastHTTPMimeType `json:"mimeTypes"`
 }
 
 func main() {
@@ -73,29 +78,34 @@ func main() {
 
 			log.Printf("Request from %s", r.RemoteAddr)
             log.Printf("Host: %s", html.EscapeString(r.Host))
-
-            currentUri := r.RequestURI
-            log.Printf("currentUri: %s", currentUri)
+            log.Printf("Method: %s", html.EscapeString(r.Method))
 
             virtualHost := getVirtualHostByServerName(r.Host)
             if virtualHost != nil {
-//                 log.Printf("Virtual host found: %s", virtualHost.ServerName)
-//                 log.Printf("Document root: %s", virtualHost.DocumentRoot)
 
-//                 currentUri := r.RequestURI
+                currentUri := r.RequestURI
 
-                isPHP := false
-                files, err := ioutil.ReadDir(virtualHost.DocumentRoot)
-                if err == nil {
-                    for _, file := range files {
-                        if file.Name() == "index.php" {
-                            isPHP = true
-                            break
-                        }
-                    }
-                }
+                isFile := false
+//                 files, err := ioutil.ReadDir(virtualHost.DocumentRoot)
+//                 if err == nil {
+//                     for _, file := range files {
+//                         if file.Name() == "index.php" {
+//                             if currentUri == "/" {
+//                                 isPHP = true
+//                                 break
+//                             }
+//                         }
+//                     }
+//                 }
 
-                if (isPHP && virtualHost.PHPProxyFCGI != "") {
+                for _, mimeType := range config.MimeTypes {
+                   if strings.HasSuffix(currentUri, mimeType.Ext) {
+                      isFile = true
+                      break
+                   }
+               }
+
+                if (!isFile && virtualHost.PHPProxyFCGI != "") {
 
                     connFactory := gofast.SimpleConnFactory("tcp", virtualHost.PHPProxyFCGI)
 
