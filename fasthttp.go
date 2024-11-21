@@ -274,9 +274,9 @@ func main() {
         }
         err = process.Signal(syscall.Signal(0)) // Correct usage of signal 0
         if err != nil {
-            log.Println("Server is not running")
+            color.Red("Server is not running")
         } else {
-            color.Blue("Server is running on port " + config.HttpPort + " with PID" + strconv.Itoa(pid))
+            color.Green("Server is running on port " + config.HttpPort + " with PID" + strconv.Itoa(pid))
         }
 
     } else {
