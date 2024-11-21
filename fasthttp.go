@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 	"github.com/yookoala/gofast"
@@ -34,16 +35,37 @@ func main() {
 
           } else if (r.Host == "wordpress.demo.adminbolt.com") {
 
+                currentUri := r.RequestURI
+                log.Printf("currentUri: %s", currentUri)
+
+//                 isPHP := false
+                isFile := false
+                fileExtensionList := []string{".php", ".html", ".htm", ".css", ".js", ".jpg", ".jpeg", ".png", ".gif", ".ico", ".svg", ".xml", ".json", ".txt", ".pdf", ".zip", ".gz", ".tar", ".rar", ".mp3", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm", ".ogg", ".ogv", ".webp", ".woff", ".woff2", ".ttf", ".eot", ".otf", ".swf", ".fla", ".psd", ".ai", ".eps", ".indd", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp", ".md", ".csv", ".sql", ".json", ".xml", ".yml", ".yaml", ".log", ".conf", ".ini", ".htaccess", ".htpasswd", ".bak", ".tmp", ".temp", ".swp", ".swo", ".swn"}
+//                 if currentUri == "/" {
+//                     isPHP = true
+//                 }
+                for _, ext := range fileExtensionList {
+                    if strings.HasSuffix(currentUri, ext) {
+                        isFile = true
+                        break
+                    }
+                }
+
+
                 documentRoot2 := "/home/word2442we7v/public_html"
 
-                connFactory := gofast.SimpleConnFactory("tcp", "127.0.0.1:9076")
+                if (isFile == false) {
+                    connFactory := gofast.SimpleConnFactory("tcp", "127.0.0.1:9076")
 
-               gfhandler := gofast.NewHandler(
-                    gofast.NewFileEndpoint(documentRoot2 + "/index.php")(gofast.BasicSession),
-                    gofast.SimpleClientFactory(connFactory),
-                )
+                   gfhandler := gofast.NewHandler(
+                        gofast.NewFileEndpoint(documentRoot2 + "/index.php")(gofast.BasicSession),
+                        gofast.SimpleClientFactory(connFactory),
+                    )
 
-                http.HandlerFunc(gfhandler.ServeHTTP).ServeHTTP(w, r)
+                    http.HandlerFunc(gfhandler.ServeHTTP).ServeHTTP(w, r)
+                } else {
+                    http.FileServer(http.Dir(documentRoot2)).ServeHTTP(w, r)
+                }
 
           } else {
               fmt.Fprintf(w, "Hello, %q! Host: %s", html.EscapeString(r.URL.Path))
