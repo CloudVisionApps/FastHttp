@@ -6,8 +6,11 @@ import (
     "encoding/json"
 	"html"
 	"log"
+	"path"
 	"net/http"
-	"io/ioutil"
+	"net/url"
+// 	"io/ioutil"
+	"regexp"
 	"os"
 	"os/signal"
 	"strings"
@@ -44,6 +47,29 @@ type FastHTTPConfig struct {
 	HttpPort string `json:"httpPort"`
 	HttpsPort string `json:"httpsPort"`
 	MimeTypes []FastHTTPMimeType `json:"mimeTypes"`
+}
+
+func GetFileName(uri string) string {
+	// Parse the URI
+	parsedURI, err := url.Parse(uri)
+	if err != nil {
+		// Handle error if the URI is malformed
+		fmt.Printf("Error parsing URI: %v\n", err)
+		return ""
+	}
+
+	// Get the file name from the path
+	return path.Base(parsedURI.Path)
+}
+
+func isFileRequest(uri string) (bool, error) {
+	parsedURI, err := url.Parse(uri)
+	if err != nil {
+		return false, err
+	}
+
+	ext := path.Ext(parsedURI.Path)
+	return ext != "", nil
 }
 
 func main() {
@@ -85,39 +111,59 @@ func main() {
 
                 currentUri := r.RequestURI
 
-                isPHP := false
-                files, err := ioutil.ReadDir(virtualHost.DocumentRoot)
-                if err == nil {
-                    for _, file := range files {
-                        if file.Name() == "index.php" {
-                            if currentUri == "/" {
-                                isPHP = true
-                                break
-                            }
-                        }
-                    }
-                }
+                isPHP := true
+//                 files, err := ioutil.ReadDir(virtualHost.DocumentRoot)
+//                 if err == nil {
+//                     for _, file := range files {
+//                         if file.Name() == "index.php" {
+//                             if currentUri == "/" {
+//                                 isPHP = true
+//                                 break
+//                             }
+//                         }
+//                     }
+//                 }
 
+                isFile, _ := isFileRequest(currentUri)
+                if isFile {
+                    isPHP = false
+                }
                 for _, mimeType := range config.MimeTypes {
                    if strings.HasSuffix(currentUri, mimeType.Ext) {
                       isPHP = false
                       break
                    }
-                    if strings.HasSuffix(currentUri, ".php") {
+                   if strings.HasSuffix(currentUri, ".php") {
+                        isPHP = true
+                        break
+                   }
+
+                    pattern := `^.*\.php(\?.*)?$`
+                    // Compile the regex
+                    re := regexp.MustCompile(pattern)
+                    // Check if the URI matches
+                    if re.MatchString(currentUri) {
                         isPHP = true
                         break
                     }
                }
-                log.Printf(currentUri)
 
+                log.Printf(currentUri)
                 log.Printf("isPHP: %t", isPHP)
 
                 if (isPHP && virtualHost.PHPProxyFCGI != "") {
 
+                    fileName := GetFileName(currentUri)
+                    if fileName == "/" || fileName == "" {
+                        fileName = "index.php"
+                    }
+
+                    log.Printf("Serving PHP file: %s", fileName)
+
                     connFactory := gofast.SimpleConnFactory("tcp", virtualHost.PHPProxyFCGI)
 
                     gofastHandler := gofast.NewHandler(
-                        gofast.NewFileEndpoint(virtualHost.DocumentRoot + "/index.php")(gofast.BasicSession),
+                        gofast.NewFileEndpoint(virtualHost.DocumentRoot + "/" + fileName)(gofast.BasicSession),
                         gofast.SimpleClientFactory(connFactory),
                     )
 
