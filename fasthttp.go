@@ -189,11 +189,6 @@ func main() {
 	// Run the server in a goroutine
 	if command == "start" {
 
-		log.Println("Starting FastHTTP server on port: " + config.HttpPort)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed: %v", err)
-		}
-
         // Get the current process ID
         pid := os.Getpid()
 
@@ -205,12 +200,20 @@ func main() {
         }
         defer file.Close()
 
-
         // Write the process ID to the file
         _, err = file.WriteString(strconv.Itoa(pid))
         if err != nil {
             log.Fatal("Error writing to PID file:", err)
         }
+
+		log.Println("Starting FastHTTP server on port: " + config.HttpPort)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server failed: %v", err)
+			 _, err = file.WriteString("")
+             if err != nil {
+                log.Fatal("Error writing to PID file:", err)
+             }
+		}
 
         select {}
 
