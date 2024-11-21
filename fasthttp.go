@@ -36,11 +36,11 @@ func main() {
           } else if (r.Host == "wordpress.demo.adminbolt.com") {
 
                 currentUri := r.RequestURI
-                log.Printf("currentUri: %s", currentUri)
+//                 log.Printf("currentUri: %s", currentUri)
 
 //                 isPHP := false
                 isFile := false
-                fileExtensionList := []string{".php", ".html", ".htm", ".css", ".js", ".jpg", ".jpeg", ".png", ".gif", ".ico", ".svg", ".xml", ".json", ".txt", ".pdf", ".zip", ".gz", ".tar", ".rar", ".mp3", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm", ".ogg", ".ogv", ".webp", ".woff", ".woff2", ".ttf", ".eot", ".otf", ".swf", ".fla", ".psd", ".ai", ".eps", ".indd", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp", ".md", ".csv", ".sql", ".json", ".xml", ".yml", ".yaml", ".log", ".conf", ".ini", ".htaccess", ".htpasswd", ".bak", ".tmp", ".temp", ".swp", ".swo", ".swn"}
+                fileExtensionList := []string{".php", ".html", ".htm", ".css", ".js", ".jpg", ".jpeg", ".png", ".gif", ".ico", ".svg", ".xml", ".json", ".txt", ".pdf", ".zip", ".gz", ".tar", ".rar", ".mp3", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm", ".ogg", ".ogv", ".webp", ".woff", ".woff2", ".ttf", ".eot", ".otf", ".swf", ".fla", ".psd", ".ai", ".eps", ".indd", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp", ".md", ".csv", ".sql", ".json", ".xml", ".yml", ".yaml", ".log", ".conf", ".ini", ".bak", ".tmp", ".temp", ".swp", ".swo", ".swn"}
 //                 if currentUri == "/" {
 //                     isPHP = true
 //                 }

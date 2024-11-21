@@ -14,4 +14,6 @@ if [ -n "$PROCESS2" ]; then
   kill -9 $(lsof -t -i:443)
 fi
 
-go run fasthttp
+#go run fasthttp
+
+systemctl restart httpd
