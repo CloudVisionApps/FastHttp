@@ -26,9 +26,19 @@ func main() {
                 http.FileServer(http.Dir(documentRoot)).ServeHTTP(w, r)
 
                 log.Printf("adminbolt.com")
-            } else {
-            	fmt.Fprintf(w, "Hello, %q! Host: %s", html.EscapeString(r.URL.Path))
-            }
+          } else if (r.Host == "vasil-levski.demo.adminbolt.com") {
+
+                documentRoot2 := "/home/vasi96970cxn/public_html"
+                http.FileServer(http.Dir(documentRoot2)).ServeHTTP(w, r)
+
+          } else if (r.Host == "wordpress.demo.adminbolt.com") {
+
+                documentRoot2 := "/home/word2442we7v/public_html"
+                http.FileServer(http.Dir(documentRoot2)).ServeHTTP(w, r)
+
+          } else {
+              fmt.Fprintf(w, "Hello, %q! Host: %s", html.EscapeString(r.URL.Path))
+          }
 
 		}),
 	}

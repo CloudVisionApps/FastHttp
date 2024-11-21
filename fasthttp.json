@@ -1,0 +1,31 @@
+{
+  "user": "nobody",
+  "group": "nobody",
+  "listen": [
+    "80",
+    "443"
+  ],
+  "virtualHosts": [
+    {
+      "listen": "80",
+      "serverName": "adminbolt.com",
+      "documentRoot": "/var/www/html",
+      "user": "adminbolt",
+      "group": "adminbolt"
+    },
+    {
+      "listen": "80",
+      "serverName": "wordpress.demo.adminbolt.com",
+      "documentRoot": "/home/word2442we7v/public_html",
+      "user": "word2442we7v",
+      "group": "word2442we7v"
+    },
+    {
+      "listen": "80",
+      "serverName": "vasil-levski.demo.adminbolt.com",
+      "documentRoot": "/home/vasi96970cxn/public_html",
+      "user": "vasi96970cxn",
+      "group": "vasi96970cxn"
+    }
+  ]
+}
