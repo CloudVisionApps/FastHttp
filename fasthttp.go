@@ -7,7 +7,7 @@ import (
 	"html"
 	"log"
 	"net/http"
-// 	"io/ioutil"
+	"io/ioutil"
 	"os"
 	"os/signal"
 	"strings"
@@ -85,36 +85,39 @@ func main() {
 
                 currentUri := r.RequestURI
 
-                isFile := false
-//                 files, err := ioutil.ReadDir(virtualHost.DocumentRoot)
-//                 if err == nil {
-//                     for _, file := range files {
-//                         if file.Name() == "index.php" {
-//                             if currentUri == "/" {
-//                                 isPHP = true
-//                                 break
-//                             }
-//                         }
-//                     }
-//                 }
+                isPHP := false
+                files, err := ioutil.ReadDir(virtualHost.DocumentRoot)
+                if err == nil {
+                    for _, file := range files {
+                        if file.Name() == "index.php" {
+                            if currentUri == "/" {
+                                isPHP = true
+                                break
+                            }
+                        }
+                    }
+                }
 
                 for _, mimeType := range config.MimeTypes {
                    if strings.HasSuffix(currentUri, mimeType.Ext) {
-                      isFile = true
+                      isPHP = false
                       break
                    }
                }
+                log.Printf(currentUri)
 
-                if (!isFile && virtualHost.PHPProxyFCGI != "") {
+                log.Printf("isPHP: %t", isPHP)
+
+                if (isPHP && virtualHost.PHPProxyFCGI != "") {
 
                     connFactory := gofast.SimpleConnFactory("tcp", virtualHost.PHPProxyFCGI)
 
-                    gfhandler := gofast.NewHandler(
+                    gofastHandler := gofast.NewHandler(
                         gofast.NewFileEndpoint(virtualHost.DocumentRoot + "/index.php")(gofast.BasicSession),
                         gofast.SimpleClientFactory(connFactory),
                     )
 
-                    http.HandlerFunc(gfhandler.ServeHTTP).ServeHTTP(w, r)
+                    http.HandlerFunc(gofastHandler.ServeHTTP).ServeHTTP(w, r)
 
                 } else {
                     http.FileServer(http.Dir(virtualHost.DocumentRoot)).ServeHTTP(w, r)
