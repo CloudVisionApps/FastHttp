@@ -17,10 +17,18 @@ func main() {
 		Addr: ":80",
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-			fmt.Fprintf(w, "Hello, %q! Host: %s", html.EscapeString(r.URL.Path))
 			log.Printf("Request from %s", r.RemoteAddr)
-
             log.Printf("Host: %s", html.EscapeString(r.Host))
+
+            if (r.Host == "adminbolt.com") {
+
+                documentRoot := "/var/www/html"
+                http.FileServer(http.Dir(documentRoot)).ServeHTTP(w, r)
+
+                log.Printf("adminbolt.com")
+            } else {
+            	fmt.Fprintf(w, "Hello, %q! Host: %s", html.EscapeString(r.URL.Path))
+            }
 
 		}),
 	}

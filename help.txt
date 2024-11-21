@@ -1,1 +1,4 @@
 // sudo lsof -t -i tcp:80 -s tcp:listen | sudo xargs kill
+
+
+sudo lsof -i:80 -t | xargs -r sudo kill
