@@ -1,7 +1,7 @@
 package main
 
 import (
-	"context"
+// 	"context"
 	"fmt"
     "encoding/json"
 	"html"
@@ -11,11 +11,10 @@ import (
 	"net/url"
 // 	"io/ioutil"
 	"regexp"
+	"strconv"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
-	"time"
+// 	"time"
 	"github.com/yookoala/gofast"
 )
 
@@ -73,6 +72,12 @@ func isFileRequest(uri string) (bool, error) {
 }
 
 func main() {
+
+    command := os.Args[1]
+    if len(os.Args) < 2 {
+        fmt.Println("Usage: fasthttp <command>")
+        os.Exit(1)
+    }
 
     configFilePath := "/fast-http/fasthttp.json"
     configFile, err := os.Open(configFilePath)
@@ -181,30 +186,66 @@ func main() {
 		}),
 	}
 
-	// Channel to listen for termination signals
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-
 	// Run the server in a goroutine
-	go func() {
+	if command == "start" {
+
 		log.Println("Starting FastHTTP server on port: " + config.HttpPort)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed: %v", err)
 		}
-	}()
 
-	// Block until a signal is received
-	<-stop
-	log.Println("Shutting down server...")
+        // Get the current process ID
+        pid := os.Getpid()
 
-	// Create a context with a timeout for shutdown
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+        // Create or overwrite the PID file
+        pidFile := "/var/run/fasthttp.pid"
+        file, err := os.Create(pidFile)
+        if err != nil {
+            log.Fatal("Error creating PID file:", err)
+        }
+        defer file.Close()
 
-	// Gracefully shut down the server
-	if err := server.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
-	}
 
-	log.Println("Server exited gracefully")
+        // Write the process ID to the file
+        _, err = file.WriteString(strconv.Itoa(pid))
+        if err != nil {
+            log.Fatal("Error writing to PID file:", err)
+        }
+
+        select {}
+
+	} else if command == "stop" {
+        log.Println("Shutting down server...")
+
+        // Finding process ID of the server
+        pidFile, err := os.Open("/var/run/fasthttp.pid")
+        if err != nil {
+            log.Fatalf("Error opening PID file: %v", err)
+        }
+        defer pidFile.Close()
+
+        pidBytes, err := os.ReadFile("/var/run/fasthttp.pid")
+        if err != nil {
+            log.Fatalf("Error reading PID file: %v", err)
+        }
+        pid, err := strconv.Atoi(string(pidBytes))
+        if err != nil {
+            log.Fatalf("Error converting PID to integer: %v", err)
+        }
+
+        // Kill the server
+        process, err := os.FindProcess(pid)
+        if err != nil {
+            log.Fatalf("Error finding process: %v", err)
+        }
+        err = process.Kill()
+        if err != nil {
+            log.Fatalf("Error killing process: %v", err)
+        }
+
+        log.Println("Server stopped")
+    } else {
+        fmt.Println("Unknown command")
+    }
+
 }
