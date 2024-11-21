@@ -279,6 +279,34 @@ func main() {
             color.Green("Server is running on port " + config.HttpPort + " with PID" + strconv.Itoa(pid))
         }
 
+    } else if command == "restart" {
+
+        // Finding process ID of the server
+        pidFile, err := os.Open("/var/run/fasthttp.pid")
+        if err != nil {
+            log.Fatalf("Error opening PID file: %v", err)
+        }
+        defer pidFile.Close()
+
+        pidBytes, err := os.ReadFile("/var/run/fasthttp.pid")
+        if err != nil {
+            log.Fatalf("Error reading PID file: %v", err)
+        }
+
+        pid, err := strconv.Atoi(string(pidBytes))
+        if err != nil {
+            log.Fatalf("Error converting PID to integer: %v", err)
+        }
+
+        // Kill the server
+        process, err := os.FindProcess(pid)
+        if err != nil {
+            log.Fatalf("Error finding process: %v", err)
+        }
+        err = process.Kill()
+
+        log.Println("Server stopped")
+
     } else {
         fmt.Println("Unknown command")
     }
