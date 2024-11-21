@@ -8,29 +8,26 @@
     {
       "portType": "http",
       "serverName": "adminbolt.com",
-      "documentRoot": "/var/www/html",
-      "user": "adminbolt",
-      "group": "adminbolt"
+      "documentRoot": "/home/admi1482j5v0/public_html",
+      "user": "admi1482j5v0",
+      "group": "admi1482j5v0",
+      "phpProxyFCGI": "127.0.0.1:9094"
     },
     {
       "portType": "http",
       "serverName": "wordpress.demo.adminbolt.com",
-      "documentRoot": "/home/word2442we7v/public_html",
-      "user": "word2442we7v",
-      "group": "word2442we7v",
-      "files": [
-        {
-          "regex": "\\.php$",
-          "handler": "proxy:fcgi://127.0.0.1:9076"
-        }
-      ]
+      "documentRoot": "/home/word2743qa3c/public_html",
+      "user": "word2743qa3c",
+      "group": "word2743qa3c",
+      "phpProxyFCGI": "127.0.0.1:9096"
     },
     {
       "portType": "http",
       "serverName": "vasil-levski.demo.adminbolt.com",
-      "documentRoot": "/home/vasi96970cxn/public_html",
-      "user": "vasi96970cxn",
-      "group": "vasi96970cxn"
+      "documentRoot": "/home/vasi5713t5cd/public_html",
+      "user": "vasi5713t5cd",
+      "group": "vasi5713t5cd",
+      "phpProxyFCGI": "127.0.0.1:9095"
     }
   ]
 }
