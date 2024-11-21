@@ -103,6 +103,10 @@ func main() {
                       isPHP = false
                       break
                    }
+                    if strings.HasSuffix(currentUri, ".php") {
+                        isPHP = true
+                        break
+                    }
                }
                 log.Printf(currentUri)
 
