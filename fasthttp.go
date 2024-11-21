@@ -16,6 +16,8 @@ import (
 	"strings"
 // 	"time"
 	"github.com/yookoala/gofast"
+	"syscall"
+	"github.com/fatih/color"
 )
 
 type FastHTTPVirtualHost struct {
@@ -247,6 +249,36 @@ func main() {
         }
 
         log.Println("Server stopped")
+    } else if command == "status" {
+
+        // Finding process ID of the server
+        pidFile, err := os.Open("/var/run/fasthttp.pid")
+        if err != nil {
+            log.Fatalf("Error opening PID file: %v", err)
+        }
+        defer pidFile.Close()
+
+        pidBytes, err := os.ReadFile("/var/run/fasthttp.pid")
+        if err != nil {
+            log.Fatalf("Error reading PID file: %v", err)
+        }
+        pid, err := strconv.Atoi(string(pidBytes))
+        if err != nil {
+            log.Fatalf("Error converting PID to integer: %v", err)
+        }
+
+       // Check if the process is running
+        process, err := os.FindProcess(pid)
+        if err != nil {
+            log.Fatalf("Error finding process: %v", err)
+        }
+        err = process.Signal(syscall.Signal(0)) // Correct usage of signal 0
+        if err != nil {
+            log.Println("Server is not running")
+        } else {
+            color.Blue("Server is running on port " + config.HttpPort + " with PID" + strconv.Itoa(pid))
+        }
+
     } else {
         fmt.Println("Unknown command")
     }
