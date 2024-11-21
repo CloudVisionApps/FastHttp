@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	"github.com/yookoala/gofast"
 )
 
 func main() {
@@ -34,7 +35,15 @@ func main() {
           } else if (r.Host == "wordpress.demo.adminbolt.com") {
 
                 documentRoot2 := "/home/word2442we7v/public_html"
-                http.FileServer(http.Dir(documentRoot2)).ServeHTTP(w, r)
+
+                connFactory := gofast.SimpleConnFactory("tcp", "127.0.0.1:9076")
+
+               gfhandler := gofast.NewHandler(
+                    gofast.NewFileEndpoint(documentRoot2 + "/index.php")(gofast.BasicSession),
+                    gofast.SimpleClientFactory(connFactory),
+                )
+
+                http.HandlerFunc(gfhandler.ServeHTTP).ServeHTTP(w, r)
 
           } else {
               fmt.Fprintf(w, "Hello, %q! Host: %s", html.EscapeString(r.URL.Path))
