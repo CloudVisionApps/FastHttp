@@ -15,5 +15,3 @@ if [ -n "$PROCESS2" ]; then
 fi
 
 go run fasthttp.go start
-
-#systemctl stop httpd
