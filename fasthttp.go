@@ -6,7 +6,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"reflect"
 	"strconv"
+	"strings"
 
 	"fasthttp/admin"
 	"fasthttp/config"
@@ -312,8 +314,11 @@ func handleConvert() {
 		os.Exit(1)
 	}
 
+	// Clean empty values before marshaling
+	cleanConfig := removeEmptyValues(fastHTTPConfig)
+
 	// Save to JSON file
-	configJSON, err := json.MarshalIndent(fastHTTPConfig, "", "  ")
+	configJSON, err := json.MarshalIndent(cleanConfig, "", "  ")
 	if err != nil {
 		fmt.Printf("Error marshaling config: %v\n", err)
 		os.Exit(1)
@@ -327,4 +332,120 @@ func handleConvert() {
 	fmt.Printf("Successfully converted configuration to %s\n", outputFile)
 	fmt.Printf("Converted %d virtual host(s)\n", len(fastHTTPConfig.VirtualHosts))
 	fmt.Printf("Note: Please review and adjust the configuration as needed.\n")
+}
+
+// removeEmptyValues removes empty/null/zero values from the config using reflection
+func removeEmptyValues(cfg *config.Config) interface{} {
+	return cleanValue(reflect.ValueOf(cfg).Elem())
+}
+
+// cleanValue recursively removes empty values from a reflect.Value
+func cleanValue(v reflect.Value) interface{} {
+	switch v.Kind() {
+	case reflect.Struct:
+		result := make(map[string]interface{})
+		t := v.Type()
+		for i := 0; i < v.NumField(); i++ {
+			field := v.Field(i)
+			fieldType := t.Field(i)
+			
+			// Skip unexported fields
+			if !field.CanInterface() {
+				continue
+			}
+			
+			// Get JSON tag name
+			jsonTag := fieldType.Tag.Get("json")
+			if jsonTag == "" || jsonTag == "-" {
+				continue
+			}
+			// Remove omitempty and other options
+			jsonName := strings.Split(jsonTag, ",")[0]
+			if jsonName == "" {
+				jsonName = fieldType.Name
+			}
+			
+			// Skip if field is empty/zero
+			if isEmptyValue(field) {
+				continue
+			}
+			
+			// Recursively clean nested values
+			cleaned := cleanValue(field)
+			if cleaned != nil {
+				result[jsonName] = cleaned
+			}
+		}
+		if len(result) == 0 {
+			return nil
+		}
+		return result
+		
+	case reflect.Slice:
+		if v.IsNil() || v.Len() == 0 {
+			return nil
+		}
+		result := make([]interface{}, 0, v.Len())
+		for i := 0; i < v.Len(); i++ {
+			cleaned := cleanValue(v.Index(i))
+			if cleaned != nil && !isEmptyValue(reflect.ValueOf(cleaned)) {
+				result = append(result, cleaned)
+			}
+		}
+		if len(result) == 0 {
+			return nil
+		}
+		return result
+		
+	case reflect.Map:
+		if v.IsNil() || v.Len() == 0 {
+			return nil
+		}
+		result := make(map[string]interface{})
+		for _, key := range v.MapKeys() {
+			val := v.MapIndex(key)
+			cleaned := cleanValue(val)
+			if cleaned != nil && !isEmptyValue(reflect.ValueOf(cleaned)) {
+				result[fmt.Sprintf("%v", key)] = cleaned
+			}
+		}
+		if len(result) == 0 {
+			return nil
+		}
+		return result
+		
+	case reflect.Ptr, reflect.Interface:
+		if v.IsNil() {
+			return nil
+		}
+		return cleanValue(v.Elem())
+		
+	default:
+		if isEmptyValue(v) {
+			return nil
+		}
+		return v.Interface()
+	}
+}
+
+// isEmptyValue checks if a value is empty/zero/null
+func isEmptyValue(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.String:
+		return v.Len() == 0
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return v.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return v.Float() == 0
+	case reflect.Bool:
+		return !v.Bool() // Include false booleans, but you might want to skip them
+	case reflect.Slice, reflect.Map, reflect.Array:
+		return v.Len() == 0
+	case reflect.Ptr, reflect.Interface:
+		return v.IsNil()
+	default:
+		return false
+	}
 }
