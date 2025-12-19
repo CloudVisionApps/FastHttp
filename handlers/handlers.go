@@ -24,15 +24,17 @@ func New(cfg *config.Config) *Handler {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Request from %s", r.RemoteAddr)
-	log.Printf("Host: %s", html.EscapeString(r.Host))
-	log.Printf("Method: %s", html.EscapeString(r.Method))
 
 	virtualHost := h.config.GetVirtualHostByServerName(r.Host)
 	if virtualHost != nil {
+
+	    log.Printf("Request from %s", r.RemoteAddr)
+        log.Printf("Host: %s", html.EscapeString(r.Host))
+        log.Printf("Method: %s", html.EscapeString(r.Method))
+
 		h.handleVirtualHost(w, r, virtualHost)
 	} else {
-		log.Printf("Virtual host not found")
+// 		log.Printf("Virtual host not found")
 		http.FileServer(http.Dir("/var/www/html")).ServeHTTP(w, r)
 	}
 }
