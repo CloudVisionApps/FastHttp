@@ -49,12 +49,14 @@ func (n *ConfigNode) AddDirective(name string, values []string) {
 		"ServerAlias": true,
 		"LogFormat": true,
 		"AddType": true,
+		"Listen": true,
 	}
 	
 	if multiValueDirectives[name] {
 		// Append values, joining them with a special separator to preserve the argument structure
 		// For CustomLog "/path format", we store as "/path|format" so we can parse it back
 		// For LogFormat "format_string name", we store as "format_string|||name" (using ||| as separator)
+		// For Listen "80", we store each port separately
 		existing := n.Directives[name]
 		if len(values) > 0 {
 			var combined string
@@ -62,11 +64,34 @@ func (n *ConfigNode) AddDirective(name string, values []string) {
 				// LogFormat: format string is first arg, name is last arg
 				// Use ||| as separator since format string might contain |
 				combined = strings.Join(values[:len(values)-1], " ") + "|||" + values[len(values)-1]
+			} else if name == "Listen" {
+				// Listen: each directive is a separate port, store each value separately
+				// Extract port from value (e.g., "80", "*:80", "0.0.0.0:443")
+				for _, val := range values {
+					port := extractPort(val)
+					if port != "" {
+						// Check if port already exists
+						found := false
+						for _, existingPort := range existing {
+							if existingPort == port {
+								found = true
+								break
+							}
+						}
+						if !found {
+							existing = append(existing, port)
+						}
+					}
+				}
+				n.Directives[name] = existing
+				return
 			} else {
 				// Join args with | separator for other directives
 				combined = strings.Join(values, "|")
 			}
-			existing = append(existing, combined)
+			if combined != "" {
+				existing = append(existing, combined)
+			}
 		}
 		n.Directives[name] = existing
 	} else {
