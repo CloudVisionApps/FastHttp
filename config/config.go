@@ -7,18 +7,21 @@ import (
 )
 
 type VirtualHost struct {
-	PortType       string   `json:"portType"`
-	Listen         []string `json:"listen"`
-	ServerName     string   `json:"serverName"`
-	ServerAlias    []string `json:"serverAlias"`
-	DocumentRoot   string   `json:"documentRoot"`
-	User           string   `json:"user"`
-	Group          string   `json:"group"`
-	ServerAdmin    string   `json:"serverAdmin"`
-	ErrorLog       string   `json:"errorLog"`
-	CustomLog      string   `json:"customLog"`
-	DirectoryIndex string   `json:"directoryIndex"`
-	PHPProxyFCGI   string   `json:"phpProxyFCGI"`
+	PortType        string   `json:"portType"`
+	Listen          []string `json:"listen"`
+	ServerName      string   `json:"serverName"`
+	ServerAlias     []string `json:"serverAlias"`
+	DocumentRoot    string   `json:"documentRoot"`
+	User            string   `json:"user"`
+	Group           string   `json:"group"`
+	ServerAdmin     string   `json:"serverAdmin"`
+	ErrorLog        string   `json:"errorLog"`
+	CustomLog       string   `json:"customLog"`
+	DirectoryIndex  string   `json:"directoryIndex"`
+	PHPProxyFCGI    string   `json:"phpProxyFCGI"`
+	CGIPath         string   `json:"cgiPath"`         // Path prefix for CGI scripts (e.g., "/cgi-bin")
+	ProxyUnixSocket string   `json:"proxyUnixSocket"` // Unix socket path for proxy (e.g., "/var/run/app.sock")
+	ProxyPath       string   `json:"proxyPath"`       // URL path prefix to proxy (e.g., "/api")
 }
 
 type MimeType struct {
