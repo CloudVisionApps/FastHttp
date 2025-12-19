@@ -97,12 +97,7 @@ func (p *ApacheHttpdParser) parseFileTree(filePath string) (*ConfigNode, error) 
 		}
 
 		// Handle simple directives
-		// Skip if we're inside an IfModule block
-		if currentNode.Type == "IfModule" {
-			continue
-		}
-
-		// Add directive to current node
+		// Add directive to current node (even if inside IfModule - we'll extract them later)
 		currentNode.AddDirective(directive, args)
 	}
 

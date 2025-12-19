@@ -197,51 +197,83 @@ func (n *ConfigNode) convertToVirtualHost() *config.VirtualHost {
 	vhost.ServerName = n.GetDirective("ServerName")
 	vhost.ServerAlias = n.GetDirectiveAll("ServerAlias")
 	vhost.DocumentRoot = n.GetDirective("DocumentRoot")
+	
+	// Extract directives from IfModule blocks as well
 	vhost.User = n.GetDirective("User")
-	if vhost.User == "" {
-		vhost.User = n.GetDirective("suPHP_UserGroup")
-		if vhost.User == "" {
-			vhost.User = n.GetDirective("SuexecUserGroup")
-			if vhost.User == "" {
-				vhost.User = n.GetDirective("AssignUserID")
-				if vhost.User == "" {
-					vhost.User = n.GetDirective("PassengerUser")
-				}
-			}
-		}
-	}
 	vhost.Group = n.GetDirective("Group")
-	if vhost.Group == "" {
-		// Try to get group from combined directives
-		if suphp := n.GetDirective("suPHP_UserGroup"); suphp != "" {
-			parts := strings.Fields(suphp)
-			if len(parts) > 1 {
-				vhost.Group = parts[1]
+	
+	// Try to get user/group from combined directives (including from IfModule blocks)
+	// These directives have format: "directive user group" where args[0] is user, args[1] is group
+	if vhost.User == "" || vhost.Group == "" {
+		// Try suPHP_UserGroup: "suPHP_UserGroup user group"
+		if suphpAll := n.getDirectiveAllFromChildren("suPHP_UserGroup"); len(suphpAll) > 0 {
+			if len(suphpAll) >= 2 {
+				if vhost.User == "" {
+					vhost.User = suphpAll[0]
+				}
+				if vhost.Group == "" {
+					vhost.Group = suphpAll[1]
+				}
+			} else if len(suphpAll) == 1 && vhost.User == "" {
+				vhost.User = suphpAll[0]
 			}
 		}
-		if vhost.Group == "" {
-			if suexec := n.GetDirective("SuexecUserGroup"); suexec != "" {
-				parts := strings.Fields(suexec)
-				if len(parts) > 1 {
-					vhost.Group = parts[1]
+		
+		// Try SuexecUserGroup: "SuexecUserGroup user group"
+		if (vhost.User == "" || vhost.Group == "") {
+			if suexecAll := n.getDirectiveAllFromChildren("SuexecUserGroup"); len(suexecAll) > 0 {
+				if len(suexecAll) >= 2 {
+					if vhost.User == "" {
+						vhost.User = suexecAll[0]
+					}
+					if vhost.Group == "" {
+						vhost.Group = suexecAll[1]
+					}
+				} else if len(suexecAll) == 1 && vhost.User == "" {
+					vhost.User = suexecAll[0]
 				}
 			}
 		}
-		if vhost.Group == "" {
-			if assign := n.GetDirective("AssignUserID"); assign != "" {
-				parts := strings.Fields(assign)
-				if len(parts) > 1 {
-					vhost.Group = parts[1]
+		
+		// Try AssignUserID: "AssignUserID user group"
+		if (vhost.User == "" || vhost.Group == "") {
+			if assignAll := n.getDirectiveAllFromChildren("AssignUserID"); len(assignAll) > 0 {
+				if len(assignAll) >= 2 {
+					if vhost.User == "" {
+						vhost.User = assignAll[0]
+					}
+					if vhost.Group == "" {
+						vhost.Group = assignAll[1]
+					}
+				} else if len(assignAll) == 1 && vhost.User == "" {
+					vhost.User = assignAll[0]
 				}
 			}
 		}
+		
+		// Try PassengerUser and PassengerGroup (separate directives)
+		if vhost.User == "" {
+			vhost.User = n.getDirectiveFromChildren("PassengerUser")
+		}
 		if vhost.Group == "" {
-			vhost.Group = n.GetDirective("PassengerGroup")
+			vhost.Group = n.getDirectiveFromChildren("PassengerGroup")
 		}
 	}
 	vhost.ServerAdmin = n.GetDirective("ServerAdmin")
+	
+	// Extract log directives from IfModule blocks
 	vhost.ErrorLog = n.GetDirective("ErrorLog")
+	if vhost.ErrorLog == "" {
+		vhost.ErrorLog = n.getDirectiveFromChildren("ErrorLog")
+	}
 	vhost.CustomLog = n.GetDirective("CustomLog")
+	if vhost.CustomLog == "" {
+		// CustomLog might appear multiple times, get the first one
+		customLogs := n.getDirectiveAllFromChildren("CustomLog")
+		if len(customLogs) > 0 {
+			vhost.CustomLog = customLogs[0]
+		}
+	}
 	vhost.DirectoryIndex = n.GetDirective("DirectoryIndex")
 	vhost.PHPProxyFCGI = n.GetDirective("PHPProxyFCGI")
 	vhost.CGIPath = n.GetDirective("CGIPath")
@@ -358,6 +390,44 @@ func (n *ConfigNode) convertToLocations() []config.Location {
 	}
 
 	return locations
+}
+
+// getDirectiveFromChildren searches for a directive in this node and all its children (including IfModule blocks)
+func (n *ConfigNode) getDirectiveFromChildren(name string) string {
+	// First check this node
+	if value := n.GetDirective(name); value != "" {
+		return value
+	}
+	
+	// Then check all children (including IfModule blocks)
+	for _, child := range n.Children {
+		if value := child.GetDirective(name); value != "" {
+			return value
+		}
+		// Recursively check nested children
+		if value := child.getDirectiveFromChildren(name); value != "" {
+			return value
+		}
+	}
+	
+	return ""
+}
+
+// getDirectiveAllFromChildren searches for all values of a directive in this node and all its children
+func (n *ConfigNode) getDirectiveAllFromChildren(name string) []string {
+	var values []string
+	
+	// Get from this node
+	values = append(values, n.GetDirectiveAll(name)...)
+	
+	// Get from all children
+	for _, child := range n.Children {
+		values = append(values, child.GetDirectiveAll(name)...)
+		// Recursively check nested children
+		values = append(values, child.getDirectiveAllFromChildren(name)...)
+	}
+	
+	return values
 }
 
 // Helper functions (will be moved from httpd.go)
