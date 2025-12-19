@@ -132,8 +132,8 @@ func startServer(cfg *config.Config) {
 			if err != nil {
 				utils.ErrorLog("Error creating listener: %v", err)
 				os.Exit(1)
-			}
-			
+	}
+
 			// Drop privileges after binding
 			if err := utils.SwitchUserGroup(cfg.User, cfg.Group); err != nil {
 				utils.ErrorLog("Error dropping privileges: %v", err)
@@ -237,7 +237,7 @@ func startServer(cfg *config.Config) {
 						Handler: rateLimitHandler,
 					}
 					utils.WebServerLog("[Web Server] Starting FastHTTP server on port: %s", p)
-					if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 						utils.ErrorLog("Server failed on port %s: %v", p, err)
 					}
 				}(port)

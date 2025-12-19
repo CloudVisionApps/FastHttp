@@ -147,9 +147,8 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 						if directive == "DirectoryMatch" {
 							currentLocation.MatchType = "regex"
 						}
-						inDirectory = true
-						fmt.Printf("  [DEBUG] Started global Directory block, path=%s\n", dirPath)
-						continue
+					inDirectory = true
+					continue
 					}
 				} else if strings.HasPrefix(originalLine, "</") {
 					// Closing tag
@@ -203,7 +202,6 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 						currentVHost.ServerName = "_default_"
 					}
 				}
-				fmt.Printf("  [DEBUG] Closing VirtualHost block, ServerName=%s, DocumentRoot=%s\n", currentVHost.ServerName, currentVHost.DocumentRoot)
 				parsed.VirtualHosts = append(parsed.VirtualHosts, *currentVHost)
 			}
 			currentVHost = nil
@@ -227,18 +225,12 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 					}
 					inDirectory = true
 					inFilesMatch = false // Reset FilesMatch state
-					fmt.Printf("  [DEBUG] Started Directory block, path=%s, currentVHost=%v\n", dirPath, currentVHost != nil)
-				} else {
-					fmt.Printf("  [DEBUG] Directory block found but conditions not met. currentVHost=%v, args=%v\n", currentVHost != nil, args)
 				}
 				continue // Skip further processing for opening tag
 			} else if strings.HasPrefix(originalLine, "</") {
 				// Closing tag - handle it here
 				if currentLocation != nil && currentVHost != nil {
-					fmt.Printf("  [DEBUG] Closing Directory block, adding location: path=%s, handler=%s, proxySocket=%s, proxyType=%s\n", currentLocation.Path, currentLocation.Handler, currentLocation.ProxyUnixSocket, currentLocation.ProxyType)
 					currentVHost.Locations = append(currentVHost.Locations, *currentLocation)
-				} else {
-					fmt.Printf("  [DEBUG] Closing Directory block but currentLocation=%v, currentVHost=%v\n", currentLocation != nil, currentVHost != nil)
 				}
 				currentLocation = nil
 				inDirectory = false
@@ -283,14 +275,10 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 						currentLocation.MatchType = "regex"
 					}
 					inFilesMatch = true
-					fmt.Printf("  [DEBUG] Started FilesMatch block, pattern=%s, path=%s, inDirectory=%v\n", pattern, currentLocation.Path, inDirectory)
-				} else {
-					fmt.Printf("  [DEBUG] FilesMatch found but conditions not met. inDirectory=%v, currentLocation=%v, args=%v\n", inDirectory, currentLocation != nil, args)
 				}
 			} else if strings.HasPrefix(originalLine, "</") {
 				// Closing tag
 				inFilesMatch = false
-				fmt.Printf("  [DEBUG] Closed FilesMatch block\n")
 			}
 		} else if inVHost {
 			// Check for closing Directory tag first (before parsing other directives)
@@ -298,10 +286,7 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 				if strings.HasPrefix(originalLine, "</") {
 					// Closing tag
 					if currentLocation != nil && currentVHost != nil {
-						fmt.Printf("  [DEBUG] Closing Directory block, adding location: path=%s, handler=%s, proxySocket=%s, proxyType=%s\n", currentLocation.Path, currentLocation.Handler, currentLocation.ProxyUnixSocket, currentLocation.ProxyType)
 						currentVHost.Locations = append(currentVHost.Locations, *currentLocation)
-					} else {
-						fmt.Printf("  [DEBUG] Closing Directory block but currentLocation=%v, currentVHost=%v\n", currentLocation != nil, currentVHost != nil)
 					}
 					currentLocation = nil
 					inDirectory = false
@@ -317,12 +302,10 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 			if inLocation || inDirectory || inFilesMatch {
 				if currentLocation != nil {
 					if directive == "sethandler" {
-						fmt.Printf("  [DEBUG] Parsing SetHandler in context: inDirectory=%v, inFilesMatch=%v, directive=%s, args=%v\n", inDirectory, inFilesMatch, directive, args)
 					}
 					p.parseLocationDirective(currentLocation, directive, args)
 				} else {
 					if directive == "sethandler" {
-						fmt.Printf("  [DEBUG] SetHandler found but currentLocation is nil. inDirectory=%v, inFilesMatch=%v\n", inDirectory, inFilesMatch)
 					}
 				}
 			}
@@ -422,6 +405,10 @@ func (p *ApacheHttpdParser) parseDirective(line string) (string, []string) {
 		parts := strings.Fields(line)
 		if len(parts) > 0 {
 			directive := strings.Trim(parts[0], "<>")
+			// Remove leading slash from closing tags (e.g., /Directory -> Directory)
+			if strings.HasPrefix(directive, "/") {
+				directive = directive[1:]
+			}
 			args := []string{}
 			if len(parts) > 1 {
 				// Join remaining parts and handle quoted strings
@@ -749,7 +736,6 @@ func (p *ApacheHttpdParser) parseLocationDirective(location *config.Location, di
 					} else {
 						location.ProxyType = "http"
 					}
-					fmt.Printf("  [DEBUG] SetHandler parsed: handler=%s, socket=%s, type=%s\n", location.Handler, location.ProxyUnixSocket, location.ProxyType)
 				}
 			} else {
 				// Handle other handler types
