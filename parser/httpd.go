@@ -560,38 +560,9 @@ func (p *ApacheHttpdParser) parseVirtualHostDirective(vhost *config.VirtualHost,
 		}
 	case "addhandler":
 		// AddHandler application/x-httpd-remi-php .php .php8 .phtml
-		// This indicates PHP is being used for this virtual host
-		if len(args) >= 2 {
-			handler := args[0]
-			if strings.Contains(handler, "php") {
-				// Create PHP location if not exists
-				hasPHPLocation := false
-				for i := range vhost.Locations {
-					if vhost.Locations[i].Handler == "php" {
-						hasPHPLocation = true
-						break
-					}
-				}
-				if !hasPHPLocation {
-					// Build regex pattern for PHP extensions
-					var extensions []string
-					for _, ext := range args[1:] {
-						ext = strings.TrimPrefix(ext, ".")
-						extensions = append(extensions, ext)
-					}
-					if len(extensions) > 0 {
-						phpPattern := "\\.(" + strings.Join(extensions, "|") + ")$"
-						phpLocation := config.Location{
-							Path:      phpPattern,
-							MatchType: "regexCaseInsensitive",
-							Handler:   "php",
-						}
-						// Add PHP location at the beginning (before static handler)
-						vhost.Locations = append([]config.Location{phpLocation}, vhost.Locations...)
-					}
-				}
-			}
-		}
+		// Note: AddHandler in Apache doesn't create location blocks, it just sets the handler for file extensions
+		// We'll note this for reference but not automatically create location blocks
+		// Location blocks should only come from explicit <Location> or <Directory> blocks
 	case "phpadminvalue", "phpvalue":
 		// PHP configuration - could be used to detect PHP usage
 		if len(args) >= 2 && args[0] == "open_basedir" {

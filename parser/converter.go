@@ -2,7 +2,6 @@ package parser
 
 import (
 	"fmt"
-	"strings"
 
 	"fasthttp/config"
 )
@@ -57,33 +56,8 @@ func (c *FastHTTPConverter) Convert(parsed *ParsedConfig, baseConfig *config.Con
 	result.VirtualHosts = append(result.VirtualHosts, parsed.VirtualHosts...)
 
 	// Apply global locations to virtual hosts if they don't have specific locations
-	// Also detect PHP extensions and add PHP proxy locations if needed
-	if phpExtensions, ok := parsed.GlobalConfig["phpExtensions"].([]string); ok && len(phpExtensions) > 0 {
-		// Create regex pattern for PHP extensions
-		phpPattern := "\\.(" + strings.Join(phpExtensions, "|") + ")$"
-		
-		// Add PHP location to each virtual host if not already present
-		for i := range result.VirtualHosts {
-			hasPHPLocation := false
-			for _, loc := range result.VirtualHosts[i].Locations {
-				if loc.Handler == "php" || loc.Handler == "proxy" {
-					hasPHPLocation = true
-					break
-				}
-			}
-			
-			// If no PHP location exists and we have PHP extensions, add one
-			if !hasPHPLocation && result.VirtualHosts[i].DocumentRoot != "" {
-				phpLocation := config.Location{
-					Path:      phpPattern,
-					MatchType: "regexCaseInsensitive",
-					Handler:   "php",
-				}
-				// Add PHP location before static location
-				result.VirtualHosts[i].Locations = append([]config.Location{phpLocation}, result.VirtualHosts[i].Locations...)
-			}
-		}
-	}
+	// Note: We don't automatically create PHP locations from AddHandler directives
+	// PHP locations should only come from explicit <Location> or <Directory> blocks in the Apache config
 
 	// Apply global locations to virtual hosts (if any)
 	if globalLocations, ok := parsed.GlobalConfig["globalLocations"].([]config.Location); ok && len(globalLocations) > 0 {
