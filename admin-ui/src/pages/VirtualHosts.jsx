@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { virtualHostsAPI } from '../api/config'
-import './VirtualHosts.css'
 
 function VirtualHosts() {
   const [virtualHosts, setVirtualHosts] = useState([])
@@ -39,14 +38,21 @@ function VirtualHosts() {
   }
 
   if (loading) {
-    return <div className="loading">Loading...</div>
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-zinc-500 text-lg">Loading...</div>
+      </div>
+    )
   }
 
   return (
-    <div className="virtualhosts">
-      <div className="page-header">
-        <h1>Virtual Hosts</h1>
-        <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+    <div>
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold text-zinc-900">Virtual Hosts</h1>
+        <button
+          className="px-4 py-2 bg-zinc-700 text-white rounded-xl hover:bg-zinc-800 transition-colors font-medium"
+          onClick={() => setShowForm(true)}
+        >
           Add Virtual Host
         </button>
       </div>
@@ -66,59 +72,79 @@ function VirtualHosts() {
         />
       )}
 
-      <div className="card">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Server Name</th>
-              <th>Document Root</th>
-              <th>Listen Ports</th>
-              <th>Locations</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {virtualHosts.length === 0 ? (
+      <div className="bg-white rounded-2xl shadow-sm border border-zinc-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-zinc-200">
+            <thead className="bg-zinc-50">
               <tr>
-                <td colSpan="5" style={{ textAlign: 'center', padding: '20px' }}>
-                  No virtual hosts configured
-                </td>
+                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  Server Name
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  Document Root
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  Listen Ports
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  Locations
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  Actions
+                </th>
               </tr>
-            ) : (
-              virtualHosts.map((vhost) => (
-                <tr key={vhost.serverName}>
-                  <td>{vhost.serverName}</td>
-                  <td>{vhost.documentRoot}</td>
-                  <td>{vhost.listen?.length > 0 ? vhost.listen.join(', ') : 'All ports'}</td>
-                  <td>{vhost.locations?.length || 0}</td>
-                  <td>
-                    <button
-                      className="btn btn-sm"
-                      onClick={() => navigate(`/locations/${vhost.serverName}`)}
-                    >
-                      Locations
-                    </button>
-                    <button
-                      className="btn btn-sm"
-                      onClick={() => {
-                        setEditing(vhost)
-                        setShowForm(true)
-                      }}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      className="btn btn-sm btn-danger"
-                      onClick={() => handleDelete(vhost.serverName)}
-                    >
-                      Delete
-                    </button>
+            </thead>
+            <tbody className="bg-white divide-y divide-zinc-200">
+              {virtualHosts.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="px-6 py-12 text-center text-zinc-500">
+                    No virtual hosts configured
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                virtualHosts.map((vhost) => (
+                  <tr key={vhost.serverName} className="hover:bg-zinc-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-zinc-900">
+                      {vhost.serverName}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-500">
+                      {vhost.documentRoot}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-500">
+                      {vhost.listen?.length > 0 ? vhost.listen.join(', ') : 'All ports'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-500">
+                      {vhost.locations?.length || 0}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                      <button
+                        className="text-zinc-700 hover:text-zinc-900"
+                        onClick={() => navigate(`/locations/${vhost.serverName}`)}
+                      >
+                        Locations
+                      </button>
+                      <button
+                        className="text-zinc-600 hover:text-zinc-900"
+                        onClick={() => {
+                          setEditing(vhost)
+                          setShowForm(true)
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="text-red-600 hover:text-red-900"
+                        onClick={() => handleDelete(vhost.serverName)}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )
@@ -152,32 +178,50 @@ function VirtualHostForm({ onClose, onSave, editing }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h2>{editing ? 'Edit' : 'Add'} Virtual Host</h2>
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label>Server Name *</label>
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-6 border-b border-zinc-200">
+          <h2 className="text-2xl font-bold text-zinc-900">
+            {editing ? 'Edit' : 'Add'} Virtual Host
+          </h2>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-2">
+              Server Name *
+            </label>
             <input
               type="text"
               value={formData.serverName}
               onChange={(e) => setFormData({ ...formData, serverName: e.target.value })}
               required
+              className="w-full px-4 py-2 border border-zinc-300 rounded-xl focus:ring-2 focus:ring-zinc-500 focus:border-zinc-500 outline-none"
             />
           </div>
 
-          <div className="form-group">
-            <label>Document Root *</label>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-2">
+              Document Root *
+            </label>
             <input
               type="text"
               value={formData.documentRoot}
               onChange={(e) => setFormData({ ...formData, documentRoot: e.target.value })}
               required
+              className="w-full px-4 py-2 border border-zinc-300 rounded-xl focus:ring-2 focus:ring-zinc-500 focus:border-zinc-500 outline-none"
             />
           </div>
 
-          <div className="form-group">
-            <label>Listen Ports (comma-separated, empty for all)</label>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-2">
+              Listen Ports (comma-separated, empty for all)
+            </label>
             <input
               type="text"
               value={formData.listen?.join(', ') || ''}
@@ -188,42 +232,53 @@ function VirtualHostForm({ onClose, onSave, editing }) {
                 })
               }
               placeholder="80, 8080"
+              className="w-full px-4 py-2 border border-zinc-300 rounded-xl focus:ring-2 focus:ring-zinc-500 focus:border-zinc-500 outline-none"
             />
           </div>
 
-          <div className="form-group">
-            <label>User</label>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-2">User</label>
             <input
               type="text"
               value={formData.user || ''}
               onChange={(e) => setFormData({ ...formData, user: e.target.value })}
+              className="w-full px-4 py-2 border border-zinc-300 rounded-xl focus:ring-2 focus:ring-zinc-500 focus:border-zinc-500 outline-none"
             />
           </div>
 
-          <div className="form-group">
-            <label>Group</label>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-2">Group</label>
             <input
               type="text"
               value={formData.group || ''}
               onChange={(e) => setFormData({ ...formData, group: e.target.value })}
+              className="w-full px-4 py-2 border border-zinc-300 rounded-xl focus:ring-2 focus:ring-zinc-500 focus:border-zinc-500 outline-none"
             />
           </div>
 
-          <div className="form-group">
-            <label>Directory Index</label>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-2">Directory Index</label>
             <input
               type="text"
               value={formData.directoryIndex || ''}
               onChange={(e) => setFormData({ ...formData, directoryIndex: e.target.value })}
               placeholder="index.php index.html"
+              className="w-full px-4 py-2 border border-zinc-300 rounded-xl focus:ring-2 focus:ring-zinc-500 focus:border-zinc-500 outline-none"
             />
           </div>
 
-          <div className="form-actions">
-            <button type="submit" className="btn btn-primary">
+          <div className="flex gap-3 pt-4 border-t border-zinc-200">
+            <button
+              type="submit"
+              className="px-4 py-2 bg-zinc-700 text-white rounded-xl hover:bg-zinc-800 transition-colors font-medium"
+            >
               {editing ? 'Update' : 'Create'}
             </button>
-            <button type="button" className="btn" onClick={onClose}>
+            <button
+              type="button"
+              className="px-4 py-2 bg-zinc-200 text-zinc-700 rounded-xl hover:bg-zinc-300 transition-colors font-medium"
+              onClick={onClose}
+            >
               Cancel
             </button>
           </div>
