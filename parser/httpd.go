@@ -63,6 +63,7 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 	var inVHost bool
 	var inLocation bool
 	var inDirectory bool
+	var inFilesMatch bool
 	var inIfModule bool
 	var ifModuleDepth int
 	lineNum := 0
@@ -216,6 +217,7 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 					currentLocation.MatchType = "regex"
 				}
 				inDirectory = true
+				inFilesMatch = false // Reset FilesMatch state
 			}
 		} else if directive == "</Directory>" || directive == "</DirectoryMatch>" {
 			if currentLocation != nil && currentVHost != nil {
@@ -241,12 +243,29 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 			}
 			currentLocation = nil
 			inLocation = false
+		} else if directive == "<FilesMatch" || directive == "<Files" {
+			if currentLocation != nil && len(args) > 0 {
+				// FilesMatch is inside a Directory block, update the location path to match the pattern
+				// The pattern is the regex/file pattern (e.g., "\.php$")
+				pattern := args[0]
+				// Remove quotes if present
+				pattern = strings.Trim(pattern, "\"'")
+				currentLocation.Path = pattern
+				if directive == "<FilesMatch" {
+					currentLocation.MatchType = "regexCaseInsensitive"
+				} else {
+					currentLocation.MatchType = "regex"
+				}
+				inFilesMatch = true
+			}
+		} else if directive == "</FilesMatch>" || directive == "</Files" {
+			inFilesMatch = false
 		} else if inVHost {
 			// Parse VirtualHost directives
 			p.parseVirtualHostDirective(currentVHost, directive, args)
 			
-			// Parse Location/Directory directives
-			if inLocation || inDirectory {
+			// Parse Location/Directory/FilesMatch directives
+			if inLocation || inDirectory || inFilesMatch {
 				if currentLocation != nil {
 					p.parseLocationDirective(currentLocation, directive, args)
 				}
@@ -646,18 +665,40 @@ func (p *ApacheHttpdParser) parseLocationDirective(location *config.Location, di
 		}
 	case "sethandler":
 		if len(args) > 0 {
-			handler := strings.ToLower(args[0])
-			switch {
-			case handler == "proxy:fcgi" || handler == "fcgid-script":
-				location.Handler = "proxy"
-				location.ProxyType = "fcgi"
-			case handler == "proxy" || handler == "proxy-server":
-				location.Handler = "proxy"
-				location.ProxyType = "http"
-			case handler == "cgi-script":
-				location.Handler = "cgi"
-			case strings.Contains(handler, "php"):
-				location.Handler = "php"
+			handler := args[0]
+			handlerLower := strings.ToLower(handler)
+			
+			// Handle proxy:unix:/path/to/sock|fcgi://localhost/ format
+			if strings.HasPrefix(handlerLower, "proxy:unix:") {
+				// Extract Unix socket path
+				// Format: proxy:unix:/path/to/sock|fcgi://localhost/
+				parts := strings.Split(handler, "|")
+				if len(parts) > 0 {
+					unixPart := strings.TrimPrefix(parts[0], "proxy:unix:")
+					location.Handler = "proxy"
+					location.ProxyUnixSocket = unixPart
+					
+					// Check if it's FCGI
+					if len(parts) > 1 && strings.Contains(parts[1], "fcgi") {
+						location.ProxyType = "fcgi"
+					} else {
+						location.ProxyType = "http"
+					}
+				}
+			} else {
+				// Handle other handler types
+				switch {
+				case handlerLower == "proxy:fcgi" || handlerLower == "fcgid-script":
+					location.Handler = "proxy"
+					location.ProxyType = "fcgi"
+				case handlerLower == "proxy" || handlerLower == "proxy-server":
+					location.Handler = "proxy"
+					location.ProxyType = "http"
+				case handlerLower == "cgi-script":
+					location.Handler = "cgi"
+				case strings.Contains(handlerLower, "php"):
+					location.Handler = "php"
+				}
 			}
 		}
 	case "phpadminvalue", "phpflag":
