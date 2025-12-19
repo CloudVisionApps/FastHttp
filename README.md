@@ -153,51 +153,184 @@ FastHTTP supports virtual hosts, allowing you to serve multiple websites from a 
   "user": "fasthttp",
   "group": "fasthttp",
   "serverAdmin": "root@localhost",
-  "httpPort": "80",
-  "httpsPort": "443",
+  "listen": ["80", "443"],
+  "directoryIndex": "index.html index.php",
+  "rateLimitRequests": 100,
+  "rateLimitWindowSeconds": 60,
+  "adminEnabled": true,
+  "adminPort": "8080",
+  "adminAuthEnabled": true,
+  "adminUsername": "admin",
+  "adminPassword": "changeme",
+  "adminIPWhitelist": ["127.0.0.1"],
+  "logFile": "/var/log/fasthttp/access.log",
+  "errorLogFile": "/var/log/fasthttp/error.log",
+  "logFormats": [
+    {
+      "name": "combined",
+      "format": "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\""
+    }
+  ],
+  "mimeTypes": [
+    {
+      "ext": ".json",
+      "type": "application/json"
+    }
+  ],
   "virtualHosts": [
     {
-      "portType": "http",
-      "serverName": "yourdomain.com",
-      "documentRoot": "/home/yourdomain/public_html",
-      "user": "yourdomain",
-      "group": "yourdomain",
-      "phpProxyFCGI": "127.0.0.1:9094"
+      "listen": ["80"],
+      "serverName": "example.com",
+      "serverAlias": ["www.example.com"],
+      "documentRoot": "/var/www/example.com",
+      "user": "www-data",
+      "group": "www-data",
+      "directoryIndex": "index.php index.html",
+      "phpProxyFCGI": "127.0.0.1:9000",
+      "customLog": [
+    {
+          "path": "/var/log/fasthttp/example.com-access.log",
+          "format": "combined"
+        }
+      ],
+      "errorLog": [
+        {
+          "path": "/var/log/fasthttp/example.com-error.log"
+        }
+      ],
+      "locations": [
+        {
+          "path": "/api",
+          "matchType": "prefix",
+          "handler": "proxy",
+          "proxyUnixSocket": "/var/run/api.sock",
+          "proxyType": "http"
+        },
+        {
+          "path": "/cgi-bin",
+          "matchType": "prefix",
+          "handler": "cgi",
+          "cgiPath": "/cgi-bin"
+        },
+        {
+          "path": "\\.php$",
+          "matchType": "regex",
+          "handler": "php",
+          "phpProxyFCGI": "127.0.0.1:9000"
+        }
+      ]
     },
     {
-      "portType": "https",
-      "serverName": "yourdomain.com",
-      "documentRoot": "/home/yourdomain/public_html",
-      "user": "yourdomain",
-      "group": "yourdomain",
-      "phpProxyFCGI": "127.0.0.1:9094",
+      "listen": ["443"],
+      "serverName": "example.com",
+      "documentRoot": "/var/www/example.com",
+      "phpProxyFCGI": "127.0.0.1:9000",
       "ssl": {
         "enabled": true,
-        "certificateFile": "/etc/ssl/certs/yourdomain.crt",
-        "certificateKeyFile": "/etc/ssl/private/yourdomain.key"
+        "certificateFile": "/etc/ssl/certs/example.com.crt",
+        "certificateKeyFile": "/etc/ssl/private/example.com.key"
       }
     }
   ]
 }
-
 ```
 
-- **serverName**: The domain or IP address for the virtual host.
-- **documentRoot**: The directory where the website files are stored.
-- **user**: The user under which the website should run.
-- **group**: The group under which the website should run.
-- **phpProxyFCGI**: The PHP-FPM server address to handle PHP requests.
-- **ssl**: Configuration for enabling SSL.
-  - **enabled**: Whether SSL is enabled for the virtual host.
-  - **certificateFile**: The path to the SSL certificate file.
-  - **certificateKeyFile**: The path to the SSL certificate key file.
- 
-### Access Logs
+#### Configuration Options
 
-FastHTTP logs all requests to a log file, which you can find in the `/var/log/fasthttp/` directory by default. You can monitor these logs to troubleshoot and analyze traffic.
+**Global Settings:**
+- **user/group**: User and group to run the server process
+- **listen**: Global ports to listen on (applies to all virtual hosts)
+- **directoryIndex**: Default directory index files
+- **rateLimitRequests/rateLimitWindowSeconds**: Rate limiting configuration
+- **adminEnabled/adminPort**: Enable and configure admin API
+- **adminAuthEnabled/adminUsername/adminPassword**: Admin authentication
+- **adminIPWhitelist**: IP addresses allowed to access admin API
+- **logFile/adminLogFile/errorLogFile**: Log file paths
+- **logFormats**: Named log format definitions
+- **mimeTypes**: Custom MIME type mappings
+- **include/includes**: Include other configuration files
 
+**Virtual Host Settings:**
+- **listen**: Ports this virtual host listens on (empty = all global ports)
+- **serverName**: Primary domain name
+- **serverAlias**: Additional domain names
+- **documentRoot**: Document root directory
+- **user/group**: User and group for this virtual host (for CGI execution)
+- **directoryIndex**: Directory index files for this virtual host
+- **phpProxyFCGI**: PHP-FPM FastCGI address (TCP)
+- **proxyUnixSocket**: Unix socket path for proxy
+- **proxyPath**: URL path prefix to proxy
+- **proxyType**: Proxy type ("http" or "fcgi")
+- **cgiPath**: Path prefix for CGI scripts
+- **customLog**: Array of custom log entries with formats
+- **errorLog**: Array of error log entries
+- **locations**: Array of location blocks
+- **ssl**: SSL/TLS configuration
+  - **enabled**: Enable SSL
+  - **certificateFile**: SSL certificate file path
+  - **certificateKeyFile**: SSL private key file path
+
+**Location Block Settings:**
+- **path**: Path pattern to match
+- **matchType**: Match type ("prefix", "regex", or "regexCaseInsensitive")
+- **handler**: Handler type ("proxy", "cgi", "php", or "static")
+- **proxyUnixSocket**: Unix socket for proxy handler
+- **proxyType**: Proxy type for proxy handler
+- **cgiPath**: CGI path for CGI handler
+- **phpProxyFCGI**: PHP-FPM address for PHP handler
+- **directoryIndex**: Directory index for this location
+
+### Logging
+
+FastHTTP supports flexible logging configuration:
+
+**Log Files:**
+- **logFile**: Web server access log (default: stdout)
+- **adminLogFile**: Admin API access log (default: stdout)
+- **errorLogFile**: Error log (default: stderr)
+
+**Per-Virtual-Host Logging:**
+- **customLog**: Multiple custom log entries with named formats
+- **errorLog**: Multiple error log entries
+
+**Log Formats:**
+Define named log formats and use them in custom log entries:
+
+```json
+{
+  "logFormats": [
+    {
+      "name": "combined",
+      "format": "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\""
+    },
+    {
+      "name": "common",
+      "format": "%h %l %u %t \"%r\" %>s %b"
+    }
+  ],
+  "virtualHosts": [
+    {
+      "customLog": [
+        {
+          "path": "/var/log/fasthttp/access.log",
+          "format": "combined"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Monitor Logs:**
 ```bash
+# Web server access log
 tail -f /var/log/fasthttp/access.log
+
+# Error log
+tail -f /var/log/fasthttp/error.log
+
+# Admin API log
+tail -f /var/log/fasthttp/admin.log
 ```
 
 ### Checking Server Status
@@ -272,6 +405,3 @@ Contributions are welcome! If you would like to improve or add features to FastH
 ## License
 
 FastHTTP is open-source and released under the [MIT License](LICENSE).
-```
-
-This version includes more specific usage instructions for starting, stopping, restarting, and reloading the server, as well as configuration testing. The example virtual host configuration and log monitoring tips should help users understand how to configure and monitor the server effectively.
