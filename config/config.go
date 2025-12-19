@@ -55,6 +55,12 @@ type MimeType struct {
 	Type string `json:"type"`
 }
 
+// LogFormat represents a named log format definition
+type LogFormat struct {
+	Name   string `json:"name"`   // Format name (e.g., "common", "combined")
+	Format string `json:"format"` // Format string (e.g., "%h %l %u %t \"%r\" %>s %b")
+}
+
 type Config struct {
 	Include               interface{}   `json:"include"`               // Single file path (string) or array of file paths ([]string)
 	Includes              interface{}   `json:"includes"`              // Alternative field name for multiple includes (array of file paths)
@@ -64,6 +70,7 @@ type Config struct {
 	Listen                []string      `json:"listen"`                // Global ports to listen on (applies to all virtual hosts)
 	VirtualHosts          []VirtualHost `json:"virtualHosts"`
 	MimeTypes             []MimeType    `json:"mimeTypes"`
+	LogFormats            []LogFormat   `json:"logFormats"`            // Named log format definitions (e.g., "combined", "common")
 	DirectoryIndex        string        `json:"directoryIndex"`        // Global default directory index
 	RateLimitRequests     int           `json:"rateLimitRequests"`
 	RateLimitWindowSeconds int          `json:"rateLimitWindowSeconds"`

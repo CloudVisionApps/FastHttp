@@ -52,6 +52,18 @@ func (c *FastHTTPConverter) Convert(parsed *ParsedConfig, baseConfig *config.Con
 		}
 	}
 
+	// Merge LogFormats (avoid duplicates by name)
+	logFormatMap := make(map[string]bool)
+	for _, lf := range result.LogFormats {
+		logFormatMap[lf.Name] = true
+	}
+	for _, lf := range parsed.LogFormats {
+		if !logFormatMap[lf.Name] {
+			result.LogFormats = append(result.LogFormats, lf)
+			logFormatMap[lf.Name] = true
+		}
+	}
+
 	// Add virtual hosts
 	result.VirtualHosts = append(result.VirtualHosts, parsed.VirtualHosts...)
 

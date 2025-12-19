@@ -47,15 +47,25 @@ func (n *ConfigNode) AddDirective(name string, values []string) {
 		"CustomLog": true,
 		"ErrorLog":  true,
 		"ServerAlias": true,
+		"LogFormat": true,
+		"AddType": true,
 	}
 	
 	if multiValueDirectives[name] {
 		// Append values, joining them with a special separator to preserve the argument structure
 		// For CustomLog "/path format", we store as "/path|format" so we can parse it back
+		// For LogFormat "format_string name", we store as "format_string|||name" (using ||| as separator)
 		existing := n.Directives[name]
 		if len(values) > 0 {
-			// Join args with | separator to preserve structure
-			combined := strings.Join(values, "|")
+			var combined string
+			if name == "LogFormat" && len(values) >= 2 {
+				// LogFormat: format string is first arg, name is last arg
+				// Use ||| as separator since format string might contain |
+				combined = strings.Join(values[:len(values)-1], " ") + "|||" + values[len(values)-1]
+			} else {
+				// Join args with | separator for other directives
+				combined = strings.Join(values, "|")
+			}
 			existing = append(existing, combined)
 		}
 		n.Directives[name] = existing
@@ -142,6 +152,7 @@ func (n *ConfigNode) ConvertToParsedConfig() *ParsedConfig {
 		VirtualHosts: []config.VirtualHost{},
 		GlobalConfig: make(map[string]interface{}),
 		MimeTypes:    []config.MimeType{},
+		LogFormats:   []config.LogFormat{},
 		Includes:     []string{},
 	}
 
@@ -174,6 +185,48 @@ func (n *ConfigNode) ConvertToParsedConfig() *ParsedConfig {
 						Type: mimeType,
 					})
 				}
+			}
+		}
+	}
+
+	// Extract LogFormat directives (including from IfModule blocks)
+	// Format: "LogFormat \"format_string\" name" or "LogFormat format_string name"
+	logFormatDirectives := n.GetDirectiveAll("LogFormat")
+	logFormatDirectives = append(logFormatDirectives, n.getDirectiveAllFromChildren("LogFormat")...)
+	logFormatMap := make(map[string]bool) // Track by name to avoid duplicates
+	
+	for _, logFormatValue := range logFormatDirectives {
+		// Stored value format: "format_string|||name" (using ||| as separator)
+		parts := strings.Split(logFormatValue, "|||")
+		if len(parts) < 2 {
+			// Fallback: try | separator for backward compatibility
+			parts = strings.Split(logFormatValue, "|")
+			if len(parts) < 2 {
+				continue // Need at least format string and name
+			}
+			// Last part is name, everything before is format string
+			formatName := strings.Trim(parts[len(parts)-1], "\"' ")
+			formatString := strings.Join(parts[:len(parts)-1], "|")
+			formatString = strings.Trim(formatString, "\"' ")
+			
+			if formatName != "" && !logFormatMap[formatName] {
+				parsed.LogFormats = append(parsed.LogFormats, config.LogFormat{
+					Name:   formatName,
+					Format: formatString,
+				})
+				logFormatMap[formatName] = true
+			}
+		} else {
+			// New format with ||| separator
+			formatString := strings.Trim(parts[0], "\"' ")
+			formatName := strings.Trim(parts[1], "\"' ")
+			
+			if formatName != "" && !logFormatMap[formatName] {
+				parsed.LogFormats = append(parsed.LogFormats, config.LogFormat{
+					Name:   formatName,
+					Format: formatString,
+				})
+				logFormatMap[formatName] = true
 			}
 		}
 	}

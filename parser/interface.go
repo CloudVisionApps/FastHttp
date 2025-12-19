@@ -18,6 +18,7 @@ type ParsedConfig struct {
 	VirtualHosts []config.VirtualHost
 	GlobalConfig map[string]interface{}
 	MimeTypes    []config.MimeType
+	LogFormats   []config.LogFormat
 	Includes     []string
 }
 
