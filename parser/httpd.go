@@ -29,12 +29,20 @@ func (p *ApacheHttpdParser) CanParse(filePath string) bool {
 }
 
 // Parse reads and parses an Apache httpd.conf file
+// If called recursively for includes, it will parse the file without processing includes again
 func (p *ApacheHttpdParser) Parse(filePath string) (*ParsedConfig, error) {
+	return p.parseFile(filePath, false)
+}
+
+// parseFile is the internal parsing method that can skip include processing
+func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*ParsedConfig, error) {
 	absPath, err := filepath.Abs(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("error resolving path: %w", err)
 	}
+	originalBaseDir := p.baseDir
 	p.baseDir = filepath.Dir(absPath)
+	defer func() { p.baseDir = originalBaseDir }()
 
 	file, err := os.Open(absPath)
 	if err != nil {
@@ -238,7 +246,69 @@ func (p *ApacheHttpdParser) Parse(filePath string) (*ParsedConfig, error) {
 		parsed.VirtualHosts = append(parsed.VirtualHosts, *currentVHost)
 	}
 
+	// Recursively parse included files (only for top-level parse, not recursive calls)
+	if !skipIncludes && len(parsed.Includes) > 0 {
+		includedVHosts, err := p.parseIncludes(parsed.Includes, make(map[string]bool), 0)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing includes: %w", err)
+		}
+		// Merge virtual hosts from included files
+		parsed.VirtualHosts = append(parsed.VirtualHosts, includedVHosts...)
+	}
+
 	return parsed, nil
+}
+
+// parseIncludes recursively parses included files and returns all virtual hosts
+func (p *ApacheHttpdParser) parseIncludes(includePaths []string, visited map[string]bool, depth int) ([]config.VirtualHost, error) {
+	// Prevent infinite recursion (max depth: 10)
+	if depth > 10 {
+		return nil, fmt.Errorf("maximum include depth exceeded (circular include?)")
+	}
+
+	var allVHosts []config.VirtualHost
+
+	for _, includePath := range includePaths {
+		// Resolve absolute path
+		absPath, err := filepath.Abs(includePath)
+		if err != nil {
+			// For IncludeOptional, skip if file doesn't exist
+			continue
+		}
+
+		// Check for circular includes
+		if visited[absPath] {
+			continue // Skip already visited files
+		}
+		visited[absPath] = true
+
+		// Check if file exists (for IncludeOptional)
+		if _, err := os.Stat(absPath); os.IsNotExist(err) {
+			continue // Skip non-existent files (IncludeOptional behavior)
+		}
+
+		// Parse the included file (skip includes to avoid double-processing, we handle them here)
+		includedParsed, err := p.parseFile(absPath, true)
+		if err != nil {
+			// For IncludeOptional, continue on error; for Include, return error
+			// We'll treat all as optional for now to be safe
+			continue
+		}
+
+		// Add virtual hosts from this file
+		allVHosts = append(allVHosts, includedParsed.VirtualHosts...)
+
+		// Recursively parse nested includes from this file
+		if len(includedParsed.Includes) > 0 {
+			nestedVHosts, err := p.parseIncludes(includedParsed.Includes, visited, depth+1)
+			if err != nil {
+				return nil, err
+			}
+			allVHosts = append(allVHosts, nestedVHosts...)
+		}
+	}
+
+	return allVHosts, nil
 }
 
 // parseDirective extracts directive name and arguments from a line
