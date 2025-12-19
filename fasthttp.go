@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"fasthttp/admin"
 	"fasthttp/config"
 	"fasthttp/handlers"
+	"fasthttp/parser"
 	"fasthttp/process"
 	"fasthttp/ratelimit"
 	"fasthttp/utils"
@@ -56,6 +58,8 @@ func main() {
 			utils.ErrorLog("Error getting status: %v", err)
 			os.Exit(1)
 		}
+	case "convert":
+		handleConvert()
 	default:
 		fmt.Println("Unknown command")
 		os.Exit(1)
@@ -181,4 +185,82 @@ func startServer(cfg *config.Config) {
 		// Keep main goroutine alive
 		select {}
 	}
+}
+
+// handleConvert handles the convert command for migrating from other web servers
+func handleConvert() {
+	if len(os.Args) < 4 {
+		fmt.Println("Usage: fasthttp convert --from <format> --input <input-file> [--output <output-file>]")
+		fmt.Println("Formats: apache, httpd")
+		fmt.Println("Example: fasthttp convert --from apache --input /etc/httpd/conf/httpd.conf --output fasthttp.json")
+		os.Exit(1)
+	}
+
+	var fromFormat, inputFile, outputFile string
+	
+	// Parse arguments
+	for i := 2; i < len(os.Args); i++ {
+		switch os.Args[i] {
+		case "--from":
+			if i+1 < len(os.Args) {
+				fromFormat = os.Args[i+1]
+				i++
+			}
+		case "--input":
+			if i+1 < len(os.Args) {
+				inputFile = os.Args[i+1]
+				i++
+			}
+		case "--output":
+			if i+1 < len(os.Args) {
+				outputFile = os.Args[i+1]
+				i++
+			}
+		}
+	}
+
+	if fromFormat == "" || inputFile == "" {
+		fmt.Println("Error: --from and --input are required")
+		os.Exit(1)
+	}
+
+	if outputFile == "" {
+		outputFile = "fasthttp.json"
+	}
+
+	// Create parser registry
+	registry := parser.NewRegistry()
+
+	// Parse the input file
+	fmt.Printf("Parsing %s configuration from %s...\n", fromFormat, inputFile)
+	parsed, err := registry.ParseFile(inputFile)
+	if err != nil {
+		fmt.Printf("Error parsing file: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Convert to FastHTTP config
+	converter := parser.NewFastHTTPConverter()
+	baseConfig := &config.Config{} // Start with empty config
+	fastHTTPConfig, err := converter.Convert(parsed, baseConfig)
+	if err != nil {
+		fmt.Printf("Error converting config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Save to JSON file
+	configJSON, err := json.MarshalIndent(fastHTTPConfig, "", "  ")
+	if err != nil {
+		fmt.Printf("Error marshaling config: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := os.WriteFile(outputFile, configJSON, 0644); err != nil {
+		fmt.Printf("Error writing output file: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Successfully converted configuration to %s\n", outputFile)
+	fmt.Printf("Converted %d virtual host(s)\n", len(fastHTTPConfig.VirtualHosts))
+	fmt.Printf("Note: Please review and adjust the configuration as needed.\n")
 }
