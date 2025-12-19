@@ -31,6 +31,18 @@ type MatchRule struct {
 	regex *regexp.Regexp
 }
 
+// Matches checks if the given string matches this match rule's pattern
+func (m *MatchRule) Matches(s string) bool {
+	if m.regex == nil {
+		return false
+	}
+	matchType := strings.ToLower(m.MatchType)
+	if matchType == "regex" || matchType == "regexcaseinsensitive" {
+		return m.regex.MatchString(s)
+	}
+	return false
+}
+
 // Location represents a location/directory block within a virtual host
 type Location struct {
 	Path            string `json:"path"`            // Path prefix to match (e.g., "/api", "/cgi-bin") OR regex pattern if matchType is "regex"

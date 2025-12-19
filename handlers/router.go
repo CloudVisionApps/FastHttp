@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"fasthttp/config"
 	"fasthttp/utils"
@@ -50,6 +52,41 @@ func (r *Router) HandleRequest(w http.ResponseWriter, req *http.Request, virtual
 			proxyUnixSocket = matchRule.ProxyUnixSocket
 			proxyType = matchRule.ProxyType
 			utils.WebServerLog("Using location: %s, match rule: %s (handler: %s)", location.Path, matchRule.Path, handler)
+		} else if len(location.MatchRules) > 0 {
+			// Location has match rules but none matched the URL path
+			// Check if this is a directory request and try to resolve index file
+			urlPath := req.URL.Path
+			if urlPath == "" || urlPath == "/" {
+				urlPath = "/"
+			}
+			fullPath := filepath.Join(virtualHost.DocumentRoot, filepath.Clean(urlPath))
+			if info, err := os.Stat(fullPath); err == nil && info.IsDir() {
+				// It's a directory, check for index file
+				indexFile := utils.FindIndexFile(fullPath, effectiveDirectoryIndex)
+				if indexFile != "" {
+					// Check match rules against the resolved index file name
+					for j := range location.MatchRules {
+						rule := &location.MatchRules[j]
+						// Match rules always match against filename
+						if rule.Matches(indexFile) {
+							matchRule = rule
+							handler = rule.Handler
+							proxyUnixSocket = rule.ProxyUnixSocket
+							proxyType = rule.ProxyType
+							utils.WebServerLog("Using location: %s, match rule: %s (handler: %s) for index file: %s", location.Path, rule.Path, handler, indexFile)
+							break
+						}
+					}
+				}
+			}
+			
+			// If still no match rule, use location's own handler
+			if matchRule == nil {
+				handler = location.Handler
+				proxyUnixSocket = location.ProxyUnixSocket
+				proxyType = location.ProxyType
+				utils.WebServerLog("Using location: %s (handler: %s)", location.Path, handler)
+			}
 		} else {
 			// Use location's own handler/proxy config
 			handler = location.Handler
