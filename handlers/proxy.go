@@ -29,16 +29,36 @@ func (h *ProxyHandler) CanHandle(r *http.Request, virtualHost *config.VirtualHos
 		return strings.HasPrefix(r.URL.Path, virtualHost.ProxyPath)
 	}
 
-	// If ProxyUnixSocket is set without ProxyPath, check if it's NOT a directory request
-	// Directory requests should be handled by StaticFileHandler to show directory listing
+	// If ProxyUnixSocket is set without ProxyPath, only proxy PHP/dynamic requests
+	// Static files should be handled by StaticFileHandler
 	if virtualHost.ProxyUnixSocket != "" {
 		urlPath := r.URL.Path
+		
 		// Don't handle root or directory paths - let StaticFileHandler show directory listing
 		if urlPath == "/" || strings.HasSuffix(urlPath, "/") {
 			return false
 		}
-		// For file requests, proxy them
-		return true
+		
+		// Check if it's a static file (has extension that's not PHP)
+		isFile, _ := utils.IsFileRequest(urlPath)
+		if isFile {
+			// If it's a file with extension, check if it's PHP
+			if strings.HasSuffix(urlPath, ".php") {
+				return true
+			}
+			// Static files (.txt, .css, .js, .jpg, etc.) should be served as static
+			return false
+		}
+		
+		// No extension - could be PHP or dynamic, proxy it
+		// But only if proxyType is fcgi (for PHP)
+		if virtualHost.ProxyType == "fcgi" {
+			return true
+		}
+		
+		// For HTTP proxy, only proxy if it looks like an API/dynamic request
+		// Otherwise let StaticFileHandler try to serve it
+		return false
 	}
 
 	return false
