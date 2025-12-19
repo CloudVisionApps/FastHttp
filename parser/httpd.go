@@ -135,34 +135,39 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 		// Handle global directives (including Directory blocks at global level)
 		if !inVHost {
 			// Handle global Directory blocks
-			if directive == "<Directory" || directive == "<DirectoryMatch" {
-				if len(args) > 0 {
-					currentLocation = &config.Location{
-						Path:      args[0],
-						MatchType: "prefix",
-						Handler:   "static",
+			if directive == "Directory" || directive == "DirectoryMatch" {
+				if strings.HasPrefix(originalLine, "<") && !strings.HasPrefix(originalLine, "</") {
+					if len(args) > 0 {
+						dirPath := strings.Trim(args[0], "\"' >")
+						currentLocation = &config.Location{
+							Path:      dirPath,
+							MatchType: "prefix",
+							Handler:   "static",
+						}
+						if directive == "DirectoryMatch" {
+							currentLocation.MatchType = "regex"
+						}
+						inDirectory = true
+						fmt.Printf("  [DEBUG] Started global Directory block, path=%s\n", dirPath)
+						continue
 					}
-					if directive == "<DirectoryMatch" {
-						currentLocation.MatchType = "regex"
+				} else if strings.HasPrefix(originalLine, "</") {
+					// Closing tag
+					if currentLocation != nil {
+						// Store global location
+						var locations []config.Location
+						if existing, ok := parsed.GlobalConfig["globalLocations"].([]config.Location); ok {
+							locations = existing
+						} else {
+							locations = []config.Location{}
+						}
+						locations = append(locations, *currentLocation)
+						parsed.GlobalConfig["globalLocations"] = locations
 					}
-					inDirectory = true
+					currentLocation = nil
+					inDirectory = false
 					continue
 				}
-			} else if directive == "</Directory>" || directive == "</DirectoryMatch>" {
-				if currentLocation != nil {
-					// Store global location
-					var locations []config.Location
-					if existing, ok := parsed.GlobalConfig["globalLocations"].([]config.Location); ok {
-						locations = existing
-					} else {
-						locations = []config.Location{}
-					}
-					locations = append(locations, *currentLocation)
-					parsed.GlobalConfig["globalLocations"] = locations
-				}
-				currentLocation = nil
-				inDirectory = false
-				continue
 			} else if inDirectory && currentLocation != nil {
 				// Parse directives inside global Directory block
 				p.parseLocationDirective(currentLocation, directive, args)
@@ -206,54 +211,67 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 			inLocation = false
 			inDirectory = false
 			currentLocation = nil
-		} else if directive == "<Directory" || directive == "<DirectoryMatch" {
-			if currentVHost != nil && len(args) > 0 {
-				currentLocation = &config.Location{
-					Path:      args[0],
-					MatchType: "prefix",
-					Handler:   "static",
+		} else if directive == "Directory" || directive == "DirectoryMatch" {
+			// Check if this is an opening tag
+			if strings.HasPrefix(originalLine, "<") && !strings.HasPrefix(originalLine, "</") {
+				if currentVHost != nil && len(args) > 0 {
+					// Clean the path argument (remove quotes and trailing >)
+					dirPath := strings.Trim(args[0], "\"' >")
+					currentLocation = &config.Location{
+						Path:      dirPath,
+						MatchType: "prefix",
+						Handler:   "static",
+					}
+					if directive == "DirectoryMatch" {
+						currentLocation.MatchType = "regex"
+					}
+					inDirectory = true
+					inFilesMatch = false // Reset FilesMatch state
+					fmt.Printf("  [DEBUG] Started Directory block, path=%s, currentVHost=%v\n", dirPath, currentVHost != nil)
+				} else {
+					fmt.Printf("  [DEBUG] Directory block found but conditions not met. currentVHost=%v, args=%v\n", currentVHost != nil, args)
 				}
-				if directive == "<DirectoryMatch" {
-					currentLocation.MatchType = "regex"
+			} else if strings.HasPrefix(originalLine, "</") {
+				// Closing tag
+				if currentLocation != nil && currentVHost != nil {
+					fmt.Printf("  [DEBUG] Closing Directory block, adding location: path=%s, handler=%s, proxySocket=%s\n", currentLocation.Path, currentLocation.Handler, currentLocation.ProxyUnixSocket)
+					currentVHost.Locations = append(currentVHost.Locations, *currentLocation)
 				}
-				inDirectory = true
-				inFilesMatch = false // Reset FilesMatch state
+				currentLocation = nil
+				inDirectory = false
+				inFilesMatch = false
 			}
-		} else if directive == "</Directory>" || directive == "</DirectoryMatch>" {
-			if currentLocation != nil && currentVHost != nil {
-				fmt.Printf("  [DEBUG] Closing Directory block, adding location: path=%s, handler=%s, proxySocket=%s\n", currentLocation.Path, currentLocation.Handler, currentLocation.ProxyUnixSocket)
-				currentVHost.Locations = append(currentVHost.Locations, *currentLocation)
-			}
-			currentLocation = nil
-			inDirectory = false
-			inFilesMatch = false
-		} else if directive == "<Location" || directive == "<LocationMatch" {
-			if currentVHost != nil && len(args) > 0 {
-				currentLocation = &config.Location{
-					Path:      args[0],
-					MatchType: "prefix",
-					Handler:   "static",
+		} else if directive == "Location" || directive == "LocationMatch" {
+			// Check if this is an opening tag
+			if strings.HasPrefix(originalLine, "<") && !strings.HasPrefix(originalLine, "</") {
+				if currentVHost != nil && len(args) > 0 {
+					currentLocation = &config.Location{
+						Path:      args[0],
+						MatchType: "prefix",
+						Handler:   "static",
+					}
+					if directive == "LocationMatch" {
+						currentLocation.MatchType = "regex"
+					}
+					inLocation = true
 				}
-				if directive == "<LocationMatch" {
-					currentLocation.MatchType = "regex"
+			} else if strings.HasPrefix(originalLine, "</") {
+				// Closing tag
+				if currentLocation != nil && currentVHost != nil {
+					currentVHost.Locations = append(currentVHost.Locations, *currentLocation)
 				}
-				inLocation = true
+				currentLocation = nil
+				inLocation = false
 			}
-		} else if directive == "</Location>" || directive == "</LocationMatch>" {
-			if currentLocation != nil && currentVHost != nil {
-				currentVHost.Locations = append(currentVHost.Locations, *currentLocation)
-			}
-			currentLocation = nil
-			inLocation = false
 		} else if directive == "FilesMatch" || directive == "Files" {
 			// Check if this is an opening tag (parseDirective strips < >)
 			if strings.HasPrefix(originalLine, "<") && !strings.HasPrefix(originalLine, "</") {
-				if currentLocation != nil && len(args) > 0 {
+				if inDirectory && currentLocation != nil && len(args) > 0 {
 					// FilesMatch is inside a Directory block, update the location path to match the pattern
 					// The pattern is the regex/file pattern (e.g., "\.php$")
 					pattern := args[0]
-					// Remove quotes if present
-					pattern = strings.Trim(pattern, "\"'")
+					// Remove quotes if present and any trailing >
+					pattern = strings.Trim(pattern, "\"' >")
 					currentLocation.Path = pattern
 					if directive == "FilesMatch" {
 						currentLocation.MatchType = "regexCaseInsensitive"
@@ -263,7 +281,7 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 					inFilesMatch = true
 					fmt.Printf("  [DEBUG] Started FilesMatch block, pattern=%s, path=%s, inDirectory=%v\n", pattern, currentLocation.Path, inDirectory)
 				} else {
-					fmt.Printf("  [DEBUG] FilesMatch found but currentLocation is nil or no args. inDirectory=%v, currentLocation=%v, args=%v\n", inDirectory, currentLocation != nil, args)
+					fmt.Printf("  [DEBUG] FilesMatch found but conditions not met. inDirectory=%v, currentLocation=%v, args=%v\n", inDirectory, currentLocation != nil, args)
 				}
 			} else if strings.HasPrefix(originalLine, "</") {
 				// Closing tag
@@ -376,8 +394,10 @@ func (p *ApacheHttpdParser) parseIncludes(includePaths []string, visited map[str
 
 // parseDirective extracts directive name and arguments from a line
 func (p *ApacheHttpdParser) parseDirective(line string) (string, []string) {
-	// Handle block directives like <VirtualHost *:80>
+	// Handle block directives like <VirtualHost *:80> or <FilesMatch "\.php$">
 	if strings.HasPrefix(line, "<") {
+		// Remove the closing > if present at the end
+		line = strings.TrimSuffix(line, ">")
 		parts := strings.Fields(line)
 		if len(parts) > 0 {
 			directive := strings.Trim(parts[0], "<>")
@@ -411,6 +431,10 @@ func (p *ApacheHttpdParser) parseDirective(line string) (string, []string) {
 
 // parseArguments parses arguments, handling quoted strings
 func (p *ApacheHttpdParser) parseArguments(line string) []string {
+	// Remove trailing > if present (from block directives like <FilesMatch "\.php$">)
+	line = strings.TrimSuffix(line, ">")
+	line = strings.TrimSpace(line)
+	
 	var args []string
 	var current strings.Builder
 	inQuotes := false
