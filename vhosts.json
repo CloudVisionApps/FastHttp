@@ -1,0 +1,156 @@
+{
+  "description": "FastHTTP Virtual Host Configuration Examples",
+  "examples": [
+    {
+      "name": "Basic Static Website",
+      "description": "Simple static website serving HTML, CSS, and JavaScript files",
+      "config": {
+        "portType": "http",
+        "serverName": "example.com",
+        "documentRoot": "/var/www/example.com/public_html",
+        "user": "www-data",
+        "group": "www-data",
+        "directoryIndex": "index.html index.htm"
+      }
+    },
+    {
+      "name": "PHP Website with FastCGI (TCP)",
+      "description": "PHP website using FastCGI over TCP connection",
+      "config": {
+        "portType": "http",
+        "serverName": "phpapp.com",
+        "documentRoot": "/var/www/phpapp.com/public_html",
+        "user": "phpapp",
+        "group": "phpapp",
+        "phpProxyFCGI": "127.0.0.1:9000",
+        "directoryIndex": "index.php index.html"
+      }
+    },
+    {
+      "name": "PHP Website with FastCGI Proxy (Unix Socket)",
+      "description": "PHP website using FastCGI over Unix socket proxy",
+      "config": {
+        "portType": "http",
+        "serverName": "phpapp2.com",
+        "documentRoot": "/var/www/phpapp2.com/public_html",
+        "user": "phpapp2",
+        "group": "phpapp2",
+        "proxyUnixSocket": "/run/php-fpm/php-fpm.sock",
+        "proxyType": "fcgi",
+        "directoryIndex": "index.php index.html index.htm"
+      }
+    },
+    {
+      "name": "CGI Scripts Support",
+      "description": "Virtual host with CGI script execution support",
+      "config": {
+        "portType": "http",
+        "serverName": "cgi.example.com",
+        "documentRoot": "/var/www/cgi.example.com/public_html",
+        "user": "cgiuser",
+        "group": "cgigroup",
+        "cgiPath": "/cgi-bin",
+        "directoryIndex": "index.cgi index.html"
+      }
+    },
+    {
+      "name": "HTTP Proxy to Backend Service",
+      "description": "Proxies requests to a backend HTTP service over Unix socket",
+      "config": {
+        "portType": "http",
+        "serverName": "api.example.com",
+        "documentRoot": "/var/www/api.example.com",
+        "user": "apiuser",
+        "group": "apiuser",
+        "proxyUnixSocket": "/var/run/backend-api.sock",
+        "proxyType": "http",
+        "proxyPath": "/api"
+      }
+    },
+    {
+      "name": "FastCGI Proxy with Path Prefix",
+      "description": "Proxies specific paths to FastCGI backend, rest serves static files",
+      "config": {
+        "portType": "http",
+        "serverName": "mixed.example.com",
+        "documentRoot": "/var/www/mixed.example.com/public_html",
+        "user": "mixeduser",
+        "group": "mixeduser",
+        "proxyUnixSocket": "/run/app-fcgi.sock",
+        "proxyType": "fcgi",
+        "proxyPath": "/app",
+        "directoryIndex": "index.html"
+      }
+    },
+    {
+      "name": "Custom Directory Index Order",
+      "description": "Virtual host with custom directory index file priority",
+      "config": {
+        "portType": "http",
+        "serverName": "custom.example.com",
+        "documentRoot": "/var/www/custom.example.com/public_html",
+        "user": "customuser",
+        "group": "customuser",
+        "directoryIndex": "home.php welcome.html index.php index.html"
+      }
+    },
+    {
+      "name": "HTTPS Virtual Host (with SSL)",
+      "description": "HTTPS virtual host configuration (SSL configuration would be separate)",
+      "config": {
+        "portType": "https",
+        "serverName": "secure.example.com",
+        "serverAlias": ["www.secure.example.com"],
+        "documentRoot": "/var/www/secure.example.com/public_html",
+        "user": "secureuser",
+        "group": "secureuser",
+        "directoryIndex": "index.php index.html"
+      }
+    },
+    {
+      "name": "Multiple Server Aliases",
+      "description": "Virtual host with multiple domain aliases",
+      "config": {
+        "portType": "http",
+        "serverName": "example.com",
+        "serverAlias": ["www.example.com", "example.net", "www.example.net"],
+        "documentRoot": "/var/www/example.com/public_html",
+        "user": "example",
+        "group": "example",
+        "directoryIndex": "index.html index.htm"
+      }
+    },
+    {
+      "name": "Complete Configuration with All Options",
+      "description": "Example showing all available configuration options",
+      "config": {
+        "portType": "http",
+        "listen": ["80", "8080"],
+        "serverName": "full.example.com",
+        "serverAlias": ["www.full.example.com"],
+        "documentRoot": "/var/www/full.example.com/public_html",
+        "user": "fulluser",
+        "group": "fullgroup",
+        "serverAdmin": "admin@full.example.com",
+        "errorLog": "/var/log/fasthttp/full.example.com-error.log",
+        "customLog": "/var/log/fasthttp/full.example.com-access.log",
+        "directoryIndex": "index.php index.html index.htm",
+        "phpProxyFCGI": "127.0.0.1:9000",
+        "cgiPath": "/cgi-bin",
+        "proxyUnixSocket": "/var/run/full-app.sock",
+        "proxyType": "fcgi",
+        "proxyPath": "/api"
+      }
+    }
+  ],
+  "notes": {
+    "directoryIndex": "Can be set globally in main config or per virtual host. Virtual host setting overrides global. Default order: index.html, index.htm, index.php",
+    "proxyType": "Can be 'http' for HTTP reverse proxy or 'fcgi' for FastCGI proxy. Default is 'http'",
+    "proxyPath": "Optional. If set, only requests matching this path prefix will be proxied. Other requests will be served as static files",
+    "cgiPath": "Path prefix where CGI scripts are located (e.g., '/cgi-bin'). Scripts in this path will be executed",
+    "phpProxyFCGI": "TCP address for PHP FastCGI (e.g., '127.0.0.1:9000')",
+    "proxyUnixSocket": "Unix socket path for proxy connections (e.g., '/var/run/app.sock')",
+    "user": "System user to run processes as (for CGI execution)",
+    "group": "System group to run processes as (for CGI execution)"
+  }
+}
