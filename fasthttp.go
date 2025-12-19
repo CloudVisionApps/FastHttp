@@ -38,7 +38,12 @@ func main() {
 			log.Fatal(err)
 		}
 	case "status":
-		if err := process.Status(cfg.HttpPort); err != nil {
+		ports := cfg.GetAllListenPorts()
+		portStr := "80"
+		if len(ports) > 0 {
+			portStr = ports[0]
+		}
+		if err := process.Status(portStr); err != nil {
 			log.Fatal(err)
 		}
 	default:
@@ -66,9 +71,12 @@ func startServer(cfg *config.Config) {
 		handler.ServeHTTP(w, r)
 	})
 
-	server := &http.Server{
-		Addr:    ":" + cfg.HttpPort,
-		Handler: rateLimitHandler,
+	// Get all ports to listen on
+	listenPorts := cfg.GetAllListenPorts()
+	
+	// If no ports configured, use default port 80
+	if len(listenPorts) == 0 {
+		listenPorts = []string{"80"}
 	}
 
 	// Write PID file
@@ -76,8 +84,32 @@ func startServer(cfg *config.Config) {
 		log.Fatal(err)
 	}
 
-	log.Println("Starting FastHTTP server on port: " + cfg.HttpPort)
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("Server failed: %v", err)
+	// Start listening on all ports
+	if len(listenPorts) == 1 {
+		// Single port - simple case
+		server := &http.Server{
+			Addr:    ":" + listenPorts[0],
+			Handler: rateLimitHandler,
+		}
+		log.Printf("Starting FastHTTP server on port: %s", listenPorts[0])
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server failed: %v", err)
+		}
+	} else {
+		// Multiple ports - start goroutines for each
+		for _, port := range listenPorts {
+			go func(p string) {
+				server := &http.Server{
+					Addr:    ":" + p,
+					Handler: rateLimitHandler,
+				}
+				log.Printf("Starting FastHTTP server on port: %s", p)
+				if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+					log.Fatalf("Server failed on port %s: %v", p, err)
+				}
+			}(port)
+		}
+		// Keep main goroutine alive
+		select {}
 	}
 }

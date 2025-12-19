@@ -5,7 +5,6 @@
       "name": "Basic Static Website",
       "description": "Simple static website serving HTML, CSS, and JavaScript files",
       "config": {
-        "portType": "http",
         "serverName": "example.com",
         "documentRoot": "/var/www/example.com/public_html",
         "user": "www-data",
@@ -17,7 +16,6 @@
       "name": "PHP Website with FastCGI (TCP)",
       "description": "PHP website using FastCGI over TCP connection",
       "config": {
-        "portType": "http",
         "serverName": "phpapp.com",
         "documentRoot": "/var/www/phpapp.com/public_html",
         "user": "phpapp",
@@ -30,7 +28,6 @@
       "name": "PHP Website with FastCGI Proxy (Unix Socket)",
       "description": "PHP website using FastCGI over Unix socket proxy",
       "config": {
-        "portType": "http",
         "serverName": "phpapp2.com",
         "documentRoot": "/var/www/phpapp2.com/public_html",
         "user": "phpapp2",
@@ -44,7 +41,6 @@
       "name": "CGI Scripts Support",
       "description": "Virtual host with CGI script execution support",
       "config": {
-        "portType": "http",
         "serverName": "cgi.example.com",
         "documentRoot": "/var/www/cgi.example.com/public_html",
         "user": "cgiuser",
@@ -57,7 +53,6 @@
       "name": "HTTP Proxy to Backend Service",
       "description": "Proxies requests to a backend HTTP service over Unix socket",
       "config": {
-        "portType": "http",
         "serverName": "api.example.com",
         "documentRoot": "/var/www/api.example.com",
         "user": "apiuser",
@@ -71,7 +66,6 @@
       "name": "FastCGI Proxy with Path Prefix",
       "description": "Proxies specific paths to FastCGI backend, rest serves static files",
       "config": {
-        "portType": "http",
         "serverName": "mixed.example.com",
         "documentRoot": "/var/www/mixed.example.com/public_html",
         "user": "mixeduser",
@@ -86,7 +80,6 @@
       "name": "Custom Directory Index Order",
       "description": "Virtual host with custom directory index file priority",
       "config": {
-        "portType": "http",
         "serverName": "custom.example.com",
         "documentRoot": "/var/www/custom.example.com/public_html",
         "user": "customuser",
@@ -98,7 +91,6 @@
       "name": "HTTPS Virtual Host (with SSL)",
       "description": "HTTPS virtual host configuration (SSL configuration would be separate)",
       "config": {
-        "portType": "https",
         "serverName": "secure.example.com",
         "serverAlias": ["www.secure.example.com"],
         "documentRoot": "/var/www/secure.example.com/public_html",
@@ -111,7 +103,6 @@
       "name": "Multiple Server Aliases",
       "description": "Virtual host with multiple domain aliases",
       "config": {
-        "portType": "http",
         "serverName": "example.com",
         "serverAlias": ["www.example.com", "example.net", "www.example.net"],
         "documentRoot": "/var/www/example.com/public_html",
@@ -124,7 +115,6 @@
       "name": "Complete Configuration with All Options",
       "description": "Example showing all available configuration options",
       "config": {
-        "portType": "http",
         "listen": ["80", "8080"],
         "serverName": "full.example.com",
         "serverAlias": ["www.full.example.com"],
@@ -148,7 +138,6 @@
       "name": "Virtual Host with Location Blocks",
       "description": "Example showing location/directory-based configuration like nginx/httpd",
       "config": {
-        "portType": "http",
         "serverName": "example.com",
         "documentRoot": "/var/www/example.com/public_html",
         "user": "example",
@@ -184,7 +173,6 @@
       "name": "Mixed Configuration with Locations",
       "description": "Virtual host with both global and location-specific handlers",
       "config": {
-        "portType": "http",
         "serverName": "mixed.example.com",
         "documentRoot": "/var/www/mixed.example.com/public_html",
         "user": "mixeduser",
@@ -215,7 +203,6 @@
       "name": "Location \"/\" as Catch-All",
       "description": "Using location \"/\" as default/catch-all handler (like nginx location /)",
       "config": {
-        "portType": "http",
         "serverName": "catchall.example.com",
         "documentRoot": "/var/www/catchall.example.com/public_html",
         "user": "catchall",
@@ -246,7 +233,6 @@
       "name": "Location with Regex Matching",
       "description": "Using regex patterns for location matching (like nginx location ~)",
       "config": {
-        "portType": "http",
         "serverName": "regex.example.com",
         "documentRoot": "/var/www/regex.example.com/public_html",
         "user": "regexuser",
@@ -296,6 +282,125 @@
     "user": "System user to run processes as (for CGI execution)",
     "group": "System group to run processes as (for CGI execution)",
     "locations": "Array of location blocks. Each location matches requests by path prefix or regex. Handler types: 'proxy', 'cgi', 'php', 'static'",
-    "matchType": "Location match type: 'prefix' (default, matches by path prefix, longest wins), 'regex' (matches by regex pattern), 'regexCaseInsensitive' (case-insensitive regex). Regex matches have higher priority than prefix matches."
-  }
+    "matchType": "Location match type: 'prefix' (default, matches by path prefix, longest wins), 'regex' (matches by regex pattern), 'regexCaseInsensitive' (case-insensitive regex). Regex matches have higher priority than prefix matches.",
+    "listen": "Array of ports that a virtual host should listen on. If empty, virtual host is available on all ports. Global 'listen' ports apply to all virtual hosts. Virtual host 'listen' ports restrict that virtual host to specific ports."
+  },
+  "multiPortExamples": [
+    {
+      "name": "Multiple Global Ports",
+      "description": "Server listens on multiple ports globally",
+      "config": {
+        "listen": ["80", "8080", "8888"],
+        "virtualHosts": [
+          {
+            "serverName": "example.com",
+            "documentRoot": "/var/www/example.com"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Virtual Host on Specific Port",
+      "description": "Different virtual hosts on different ports",
+      "config": {
+        "virtualHosts": [
+          {
+            "serverName": "app1.example.com",
+            "listen": ["8080"],
+            "documentRoot": "/var/www/app1",
+            "locations": [
+              {
+                "path": "\\.php$",
+                "matchType": "regexCaseInsensitive",
+                "handler": "proxy",
+                "proxyUnixSocket": "/run/app1-fcgi.sock",
+                "proxyType": "fcgi"
+              }
+            ]
+          },
+          {
+            "serverName": "app2.example.com",
+            "listen": ["8081"],
+            "documentRoot": "/var/www/app2",
+            "locations": [
+              {
+                "path": "\\.php$",
+                "matchType": "regexCaseInsensitive",
+                "handler": "proxy",
+                "proxyUnixSocket": "/run/app2-fcgi.sock",
+                "proxyType": "fcgi"
+              }
+            ]
+          },
+          {
+            "serverName": "api.example.com",
+            "listen": ["9090"],
+            "documentRoot": "/var/www/api",
+            "locations": [
+              {
+                "path": "/",
+                "handler": "proxy",
+                "proxyUnixSocket": "/var/run/api.sock",
+                "proxyType": "http"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Virtual Host on Multiple Ports",
+      "description": "Single virtual host accessible on multiple ports",
+      "config": {
+        "virtualHosts": [
+          {
+            "serverName": "example.com",
+            "listen": ["80", "8080", "8888"],
+            "documentRoot": "/var/www/example.com/public_html",
+            "locations": [
+              {
+                "path": "\\.php$",
+                "matchType": "regexCaseInsensitive",
+                "handler": "proxy",
+                "proxyUnixSocket": "/run/php-fpm.sock",
+                "proxyType": "fcgi"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Mixed Port Configuration",
+      "description": "Some virtual hosts on specific ports, others on all ports",
+      "config": {
+        "listen": ["80"],
+        "virtualHosts": [
+          {
+            "serverName": "default.example.com",
+            "documentRoot": "/var/www/default",
+            "listen": []
+          },
+          {
+            "serverName": "admin.example.com",
+            "listen": ["8080"],
+            "documentRoot": "/var/www/admin"
+          },
+          {
+            "serverName": "api.example.com",
+            "listen": ["9090"],
+            "documentRoot": "/var/www/api",
+            "locations": [
+              {
+                "path": "/",
+                "handler": "proxy",
+                "proxyUnixSocket": "/var/run/api.sock",
+                "proxyType": "http"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }

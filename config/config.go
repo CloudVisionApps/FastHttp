@@ -24,8 +24,7 @@ type Location struct {
 }
 
 type VirtualHost struct {
-	PortType        string     `json:"portType"`
-	Listen          []string   `json:"listen"`
+	Listen          []string   `json:"listen"`          // Ports this virtual host listens on (empty = all ports)
 	ServerName      string     `json:"serverName"`
 	ServerAlias     []string   `json:"serverAlias"`
 	DocumentRoot    string     `json:"documentRoot"`
@@ -52,10 +51,8 @@ type Config struct {
 	User                  string        `json:"user"`
 	Group                 string        `json:"group"`
 	ServerAdmin           string        `json:"serverAdmin"`
-	Listen                []string      `json:"listen"`
+	Listen                []string      `json:"listen"`                // Global ports to listen on (applies to all virtual hosts)
 	VirtualHosts          []VirtualHost `json:"virtualHosts"`
-	HttpPort              string        `json:"httpPort"`
-	HttpsPort             string        `json:"httpsPort"`
 	MimeTypes             []MimeType    `json:"mimeTypes"`
 	DirectoryIndex        string        `json:"directoryIndex"`        // Global default directory index
 	RateLimitRequests     int           `json:"rateLimitRequests"`
@@ -85,13 +82,73 @@ func Load(configFilePath string) (*Config, error) {
 	return &config, nil
 }
 
+// GetVirtualHostByServerName finds a virtual host by server name
+// If port is provided, also matches against the virtual host's Listen ports
 func (c *Config) GetVirtualHostByServerName(serverName string) *VirtualHost {
+	return c.GetVirtualHostByServerNameAndPort(serverName, "")
+}
+
+// GetVirtualHostByServerNameAndPort finds a virtual host by server name and port
+func (c *Config) GetVirtualHostByServerNameAndPort(serverName, port string) *VirtualHost {
 	for i, v := range c.VirtualHosts {
+		// Check server name
 		if v.ServerName == serverName {
+			// If port is specified, check if virtual host listens on that port
+			if port != "" && len(v.Listen) > 0 {
+				for _, listenPort := range v.Listen {
+					if listenPort == port {
+						return &c.VirtualHosts[i]
+					}
+				}
+				// Virtual host has Listen ports but this port doesn't match, skip
+				continue
+			}
+			// No port specified or virtual host has no Listen restriction
 			return &c.VirtualHosts[i]
+		}
+		// Check server aliases
+		for _, alias := range v.ServerAlias {
+			if alias == serverName {
+				if port != "" && len(v.Listen) > 0 {
+					for _, listenPort := range v.Listen {
+						if listenPort == port {
+							return &c.VirtualHosts[i]
+						}
+					}
+					continue
+				}
+				return &c.VirtualHosts[i]
+			}
 		}
 	}
 	return nil
+}
+
+// GetAllListenPorts returns all unique ports that should be listened on
+// Combines global Listen and virtual host Listen ports
+func (c *Config) GetAllListenPorts() []string {
+	portMap := make(map[string]bool)
+	var ports []string
+
+	// Add global Listen ports
+	for _, port := range c.Listen {
+		if port != "" && !portMap[port] {
+			portMap[port] = true
+			ports = append(ports, port)
+		}
+	}
+
+	// Add virtual host Listen ports
+	for _, vhost := range c.VirtualHosts {
+		for _, port := range vhost.Listen {
+			if port != "" && !portMap[port] {
+				portMap[port] = true
+				ports = append(ports, port)
+			}
+		}
+	}
+
+	return ports
 }
 
 func (c *Config) GetRateLimitConfig() (maxRequests, windowSeconds int) {
