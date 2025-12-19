@@ -55,6 +55,8 @@ func (p *ApacheHttpdParser) Parse(filePath string) (*ParsedConfig, error) {
 	var inVHost bool
 	var inLocation bool
 	var inDirectory bool
+	var inIfModule bool
+	var ifModuleDepth int
 	lineNum := 0
 
 	for scanner.Scan() {
@@ -77,17 +79,81 @@ func (p *ApacheHttpdParser) Parse(filePath string) (*ParsedConfig, error) {
 			continue
 		}
 
-		// Handle includes
-		if directive == "Include" || directive == "IncludeOptional" {
-			for _, arg := range args {
-				includePath := p.resolvePath(arg)
-				parsed.Includes = append(parsed.Includes, includePath)
+		// Handle IfModule blocks (we'll parse them but note they're conditional)
+		if directive == "<IfModule" {
+			inIfModule = true
+			ifModuleDepth = 1
+			continue
+		} else if directive == "</IfModule>" {
+			ifModuleDepth--
+			if ifModuleDepth == 0 {
+				inIfModule = false
+			}
+			continue
+		} else if strings.HasPrefix(directive, "<If") {
+			// Other conditional blocks
+			inIfModule = true
+			ifModuleDepth = 1
+			continue
+		} else if strings.HasPrefix(directive, "</If") {
+			ifModuleDepth--
+			if ifModuleDepth == 0 {
+				inIfModule = false
 			}
 			continue
 		}
 
-		// Handle global directives
+		// Skip processing directives inside IfModule blocks (we can't know if module is loaded)
+		if inIfModule {
+			continue
+		}
+
+		// Handle includes (with glob pattern expansion)
+		if directive == "Include" || directive == "IncludeOptional" {
+			for _, arg := range args {
+				includePaths := p.expandIncludePath(arg)
+				parsed.Includes = append(parsed.Includes, includePaths...)
+			}
+			continue
+		}
+
+		// Handle global directives (including Directory blocks at global level)
 		if !inVHost {
+			// Handle global Directory blocks
+			if directive == "<Directory" || directive == "<DirectoryMatch" {
+				if len(args) > 0 {
+					currentLocation = &config.Location{
+						Path:      args[0],
+						MatchType: "prefix",
+						Handler:   "static",
+					}
+					if directive == "<DirectoryMatch" {
+						currentLocation.MatchType = "regex"
+					}
+					inDirectory = true
+					continue
+				}
+			} else if directive == "</Directory>" || directive == "</DirectoryMatch>" {
+				if currentLocation != nil {
+					// Store global location
+					var locations []config.Location
+					if existing, ok := parsed.GlobalConfig["globalLocations"].([]config.Location); ok {
+						locations = existing
+					} else {
+						locations = []config.Location{}
+					}
+					locations = append(locations, *currentLocation)
+					parsed.GlobalConfig["globalLocations"] = locations
+				}
+				currentLocation = nil
+				inDirectory = false
+				continue
+			} else if inDirectory && currentLocation != nil {
+				// Parse directives inside global Directory block
+				p.parseLocationDirective(currentLocation, directive, args)
+				continue
+			}
+			
 			p.parseGlobalDirective(parsed, directive, args)
 		}
 
@@ -300,6 +366,62 @@ func (p *ApacheHttpdParser) parseGlobalDirective(parsed *ParsedConfig, directive
 				})
 			}
 		}
+	case "servername":
+		if len(args) > 0 {
+			parsed.GlobalConfig["serverName"] = args[0]
+		}
+	case "serverroot":
+		if len(args) > 0 {
+			parsed.GlobalConfig["serverRoot"] = p.resolvePath(args[0])
+		}
+	case "pidfile":
+		// Ignore, not relevant for FastHTTP
+	case "scriptalias":
+		// Global ScriptAlias - note it for later use
+		if len(args) >= 2 {
+			if parsed.GlobalConfig["scriptAliases"] == nil {
+				parsed.GlobalConfig["scriptAliases"] = map[string]string{}
+			}
+			if aliases, ok := parsed.GlobalConfig["scriptAliases"].(map[string]string); ok {
+				aliases[args[0]] = p.resolvePath(args[1])
+			}
+		}
+	case "action":
+		// Action directives for PHP handlers
+		// Action application/x-httpd-remi-php84 /cgi-sys/remi-php84
+		if len(args) >= 2 {
+			mimeType := args[0]
+			handler := args[1]
+			if strings.Contains(mimeType, "php") {
+				// Note PHP handler
+				if parsed.GlobalConfig["phpHandlers"] == nil {
+					parsed.GlobalConfig["phpHandlers"] = map[string]string{}
+				}
+				if handlers, ok := parsed.GlobalConfig["phpHandlers"].(map[string]string); ok {
+					handlers[mimeType] = handler
+				}
+			}
+		}
+	case "addhandler":
+		// AddHandler application/x-httpd-remi-php84 .php .php8 .phtml
+		if len(args) >= 2 {
+			handler := args[0]
+			if strings.Contains(handler, "php") {
+				// This indicates PHP is being used
+				parsed.GlobalConfig["phpHandler"] = handler
+				// Map extensions to PHP
+				for _, ext := range args[1:] {
+					ext = strings.TrimPrefix(ext, ".")
+					// Note these extensions should use PHP handler
+					if parsed.GlobalConfig["phpExtensions"] == nil {
+						parsed.GlobalConfig["phpExtensions"] = []string{}
+					}
+					if exts, ok := parsed.GlobalConfig["phpExtensions"].([]string); ok {
+						parsed.GlobalConfig["phpExtensions"] = append(exts, ext)
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -430,4 +552,43 @@ func (p *ApacheHttpdParser) resolvePath(path string) string {
 		return path
 	}
 	return filepath.Join(p.baseDir, path)
+}
+
+// expandIncludePath expands glob patterns in include paths
+func (p *ApacheHttpdParser) expandIncludePath(pattern string) []string {
+	// Check if pattern contains glob characters
+	if !strings.Contains(pattern, "*") && !strings.Contains(pattern, "?") {
+		// No glob, return single resolved path
+		return []string{p.resolvePath(pattern)}
+	}
+
+	// Resolve base directory for glob
+	var searchDir, globPattern string
+	if filepath.IsAbs(pattern) {
+		searchDir = filepath.Dir(pattern)
+		globPattern = filepath.Base(pattern)
+	} else {
+		fullPath := filepath.Join(p.baseDir, pattern)
+		searchDir = filepath.Dir(fullPath)
+		globPattern = filepath.Base(pattern)
+	}
+
+	// Find matching files
+	var matches []string
+	entries, err := os.ReadDir(searchDir)
+	if err != nil {
+		// If directory doesn't exist or can't be read, return empty (IncludeOptional behavior)
+		return []string{}
+	}
+
+	// Simple glob matching (supports * and ?)
+	globRegex := regexp.MustCompile("^" + strings.ReplaceAll(strings.ReplaceAll(globPattern, "*", ".*"), "?", ".") + "$")
+	
+	for _, entry := range entries {
+		if !entry.IsDir() && globRegex.MatchString(entry.Name()) {
+			matches = append(matches, filepath.Join(searchDir, entry.Name()))
+		}
+	}
+
+	return matches
 }
