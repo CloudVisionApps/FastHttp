@@ -4,18 +4,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 )
 
 // Location represents a location/directory block within a virtual host
 type Location struct {
-	Path           string `json:"path"`           // Path prefix to match (e.g., "/api", "/cgi-bin")
-	Handler        string `json:"handler"`        // Handler type: "proxy", "cgi", "php", "static"
+	Path            string `json:"path"`            // Path prefix to match (e.g., "/api", "/cgi-bin") OR regex pattern if matchType is "regex"
+	MatchType       string `json:"matchType"`       // Match type: "prefix" (default), "regex", "regexCaseInsensitive"
+	Handler         string `json:"handler"`         // Handler type: "proxy", "cgi", "php", "static"
 	ProxyUnixSocket string `json:"proxyUnixSocket"` // Unix socket for proxy handler
-	ProxyType      string `json:"proxyType"`      // Proxy type: "http" or "fcgi"
-	CGIPath        string `json:"cgiPath"`        // CGI path (usually same as path)
-	PHPProxyFCGI   string `json:"phpProxyFCGI"`   // PHP FastCGI address (TCP)
-	DirectoryIndex string `json:"directoryIndex"`  // Directory index for this location
+	ProxyType       string `json:"proxyType"`       // Proxy type: "http" or "fcgi"
+	CGIPath         string `json:"cgiPath"`         // CGI path (usually same as path)
+	PHPProxyFCGI    string `json:"phpProxyFCGI"`   // PHP FastCGI address (TCP)
+	DirectoryIndex  string `json:"directoryIndex"`  // Directory index for this location
+	
+	// Internal: compiled regex (not in JSON)
+	regex *regexp.Regexp
 }
 
 type VirtualHost struct {
@@ -70,6 +75,13 @@ func Load(configFilePath string) (*Config, error) {
 		return nil, fmt.Errorf("error parsing FastHTTP JSON configuration: %w", err)
 	}
 
+	// Compile regex patterns for all locations
+	for i := range config.VirtualHosts {
+		if err := config.VirtualHosts[i].CompileLocationRegexes(); err != nil {
+			return nil, fmt.Errorf("error compiling location regexes: %w", err)
+		}
+	}
+
 	return &config, nil
 }
 
@@ -103,16 +115,63 @@ func (c *Config) GetDirectoryIndex(virtualHost *VirtualHost) string {
 	return c.DirectoryIndex
 }
 
+// CompileLocationRegexes compiles regex patterns for all locations
+// Should be called after loading configuration
+func (v *VirtualHost) CompileLocationRegexes() error {
+	for i := range v.Locations {
+		loc := &v.Locations[i]
+		matchType := strings.ToLower(loc.MatchType)
+		if matchType == "" {
+			matchType = "prefix" // Default to prefix matching
+		}
+
+		if matchType == "regex" || matchType == "regexcaseinsensitive" {
+			var err error
+			if matchType == "regexcaseinsensitive" {
+				loc.regex, err = regexp.Compile("(?i)" + loc.Path)
+			} else {
+				loc.regex, err = regexp.Compile(loc.Path)
+			}
+			if err != nil {
+				return fmt.Errorf("invalid regex pattern in location %s: %w", loc.Path, err)
+			}
+		}
+	}
+	return nil
+}
+
 // GetLocationForPath finds the matching location block for a given path
 // Returns the location and true if found, nil and false otherwise
-// Locations are matched by longest path prefix
+// Priority: regex matches first (in order), then longest path prefix
 func (v *VirtualHost) GetLocationForPath(path string) (*Location, bool) {
+	// First, check regex matches (they have higher priority)
+	for i := range v.Locations {
+		loc := &v.Locations[i]
+		matchType := strings.ToLower(loc.MatchType)
+		if matchType == "" {
+			matchType = "prefix"
+		}
+
+		if (matchType == "regex" || matchType == "regexcaseinsensitive") && loc.regex != nil {
+			if loc.regex.MatchString(path) {
+				return loc, true
+			}
+		}
+	}
+
+	// Then, check prefix matches (longest prefix wins)
 	var bestMatch *Location
 	longestMatch := 0
 
 	for i := range v.Locations {
 		loc := &v.Locations[i]
-		if strings.HasPrefix(path, loc.Path) {
+		matchType := strings.ToLower(loc.MatchType)
+		if matchType == "" {
+			matchType = "prefix"
+		}
+
+		// Only check prefix matches (skip regex locations)
+		if matchType == "prefix" && strings.HasPrefix(path, loc.Path) {
 			if len(loc.Path) > longestMatch {
 				longestMatch = len(loc.Path)
 				bestMatch = loc

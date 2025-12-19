@@ -210,6 +210,80 @@
           }
         ]
       }
+    },
+    {
+      "name": "Location \"/\" as Catch-All",
+      "description": "Using location \"/\" as default/catch-all handler (like nginx location /)",
+      "config": {
+        "portType": "http",
+        "serverName": "catchall.example.com",
+        "documentRoot": "/var/www/catchall.example.com/public_html",
+        "user": "catchall",
+        "group": "catchall",
+        "locations": [
+          {
+            "path": "/api",
+            "handler": "proxy",
+            "proxyUnixSocket": "/var/run/api.sock",
+            "proxyType": "http"
+          },
+          {
+            "path": "/cgi-bin",
+            "handler": "cgi",
+            "cgiPath": "/cgi-bin"
+          },
+          {
+            "path": "/",
+            "handler": "proxy",
+            "proxyUnixSocket": "/run/default-fcgi.sock",
+            "proxyType": "fcgi",
+            "directoryIndex": "index.php index.html"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Location with Regex Matching",
+      "description": "Using regex patterns for location matching (like nginx location ~)",
+      "config": {
+        "portType": "http",
+        "serverName": "regex.example.com",
+        "documentRoot": "/var/www/regex.example.com/public_html",
+        "user": "regexuser",
+        "group": "regexuser",
+        "locations": [
+          {
+            "path": "^/api/v[0-9]+/",
+            "matchType": "regex",
+            "handler": "proxy",
+            "proxyUnixSocket": "/var/run/api-versioned.sock",
+            "proxyType": "http"
+          },
+          {
+            "path": "\\.(php|phtml)$",
+            "matchType": "regexCaseInsensitive",
+            "handler": "proxy",
+            "proxyUnixSocket": "/run/php-fpm.sock",
+            "proxyType": "fcgi"
+          },
+          {
+            "path": "^/static/.*\\.(css|js|jpg|png|gif)$",
+            "matchType": "regex",
+            "handler": "static"
+          },
+          {
+            "path": "/cgi-bin",
+            "matchType": "prefix",
+            "handler": "cgi",
+            "cgiPath": "/cgi-bin"
+          },
+          {
+            "path": "/",
+            "matchType": "prefix",
+            "handler": "static"
+          }
+        ]
+      }
     }
   ],
   "notes": {
@@ -221,6 +295,7 @@
     "proxyUnixSocket": "Unix socket path for proxy connections (e.g., '/var/run/app.sock')",
     "user": "System user to run processes as (for CGI execution)",
     "group": "System group to run processes as (for CGI execution)",
-    "locations": "Array of location blocks. Each location matches requests by path prefix. Longest matching path wins. Handler types: 'proxy', 'cgi', 'php', 'static'"
+    "locations": "Array of location blocks. Each location matches requests by path prefix or regex. Handler types: 'proxy', 'cgi', 'php', 'static'",
+    "matchType": "Location match type: 'prefix' (default, matches by path prefix, longest wins), 'regex' (matches by regex pattern), 'regexCaseInsensitive' (case-insensitive regex). Regex matches have higher priority than prefix matches."
   }
 }
