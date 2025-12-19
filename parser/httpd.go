@@ -69,7 +69,8 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 
 	for scanner.Scan() {
 		lineNum++
-		line := strings.TrimSpace(scanner.Text())
+		originalLine := strings.TrimSpace(scanner.Text())
+		line := originalLine
 
 		// Skip comments and empty lines
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -171,7 +172,8 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 		}
 
 		// Handle VirtualHost blocks
-		if directive == "<VirtualHost" {
+		// Note: parseDirective trims <>, so <VirtualHost> becomes "VirtualHost"
+		if directive == "VirtualHost" && strings.HasPrefix(originalLine, "<") && !strings.HasPrefix(originalLine, "</") {
 			if len(args) > 0 {
 				// Extract port from VirtualHost directive (e.g., "*:80" or "192.168.1.1:443")
 				port := p.extractPort(args[0])
@@ -184,7 +186,7 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 				}
 				inVHost = true
 			}
-		} else if directive == "</VirtualHost>" {
+		} else if directive == "VirtualHost" && strings.HasPrefix(originalLine, "</") {
 			if currentVHost != nil {
 				// Add virtual host even if ServerName is empty (it might be set later or be a default vhost)
 				if currentVHost.ServerName == "" {
@@ -195,6 +197,7 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 						currentVHost.ServerName = "_default_"
 					}
 				}
+				fmt.Printf("  [DEBUG] Closing VirtualHost block, ServerName=%s, DocumentRoot=%s\n", currentVHost.ServerName, currentVHost.DocumentRoot)
 				parsed.VirtualHosts = append(parsed.VirtualHosts, *currentVHost)
 			}
 			currentVHost = nil
@@ -302,6 +305,7 @@ func (p *ApacheHttpdParser) parseIncludes(includePaths []string, visited map[str
 		}
 
 		// Parse the included file (skip includes to avoid double-processing, we handle them here)
+		fmt.Printf("Parsing included file: %s\n", absPath)
 		includedParsed, err := p.parseFile(absPath, true)
 		if err != nil {
 			// For IncludeOptional, continue on error; for Include, return error
@@ -313,6 +317,11 @@ func (p *ApacheHttpdParser) parseIncludes(includePaths []string, visited map[str
 		// Add virtual hosts from this file
 		if len(includedParsed.VirtualHosts) > 0 {
 			fmt.Printf("Found %d virtual host(s) in %s\n", len(includedParsed.VirtualHosts), absPath)
+			for i, vhost := range includedParsed.VirtualHosts {
+				fmt.Printf("  VirtualHost %d: ServerName=%s, DocumentRoot=%s\n", i+1, vhost.ServerName, vhost.DocumentRoot)
+			}
+		} else {
+			fmt.Printf("No virtual hosts found in %s (file parsed but no VirtualHost blocks detected)\n", absPath)
 		}
 		allVHosts = append(allVHosts, includedParsed.VirtualHosts...)
 
