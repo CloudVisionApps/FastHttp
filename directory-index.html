@@ -5,81 +5,144 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Index of {{.Path}}</title>
     <style>
+        * {
+            box-sizing: border-box;
+        }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-            color: #333;
+            padding: 40px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #1a1a1a;
+            line-height: 1.6;
         }
         .container {
-            max-width: 800px;
+            max-width: 1000px;
             margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background: #ffffff;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
         }
         h1 {
-            margin-top: 0;
-            color: #2c3e50;
-            border-bottom: 2px solid #3498db;
-            padding-bottom: 10px;
+            margin: 0 0 8px 0;
+            color: #1a1a1a;
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
         }
         .breadcrumb {
-            margin-bottom: 20px;
-            color: #7f8c8d;
+            margin-bottom: 24px;
+            color: #6b7280;
             font-size: 14px;
+            padding: 8px 0;
         }
         .breadcrumb a {
-            color: #3498db;
+            color: #667eea;
             text-decoration: none;
+            transition: color 0.2s ease;
         }
         .breadcrumb a:hover {
+            color: #764ba2;
             text-decoration: underline;
         }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 20px;
+            margin-top: 24px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            overflow: hidden;
         }
         thead {
-            background-color: #ecf0f1;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
         th {
             text-align: left;
-            padding: 12px;
+            padding: 16px;
             font-weight: 600;
-            color: #2c3e50;
-            border-bottom: 2px solid #bdc3c7;
+            color: #ffffff;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        th:first-child {
+            width: 40px;
+        }
+        th.size {
+            text-align: right;
+            width: 120px;
         }
         td {
-            padding: 10px 12px;
-            border-bottom: 1px solid #ecf0f1;
+            padding: 14px 16px;
+            border-bottom: 1px solid #f3f4f6;
+            transition: background-color 0.15s ease;
         }
-        tr:hover {
-            background-color: #f8f9fa;
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+        tbody tr:hover {
+            background-color: #f9fafb;
+        }
+        tbody tr:hover td {
+            border-color: #e5e7eb;
         }
         .icon {
-            width: 20px;
+            width: 40px;
             text-align: center;
-            padding-right: 10px;
+            font-size: 18px;
         }
         a {
-            color: #3498db;
+            color: #667eea;
             text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s ease;
         }
         a:hover {
+            color: #764ba2;
             text-decoration: underline;
         }
         .size {
             text-align: right;
-            font-family: monospace;
-            color: #7f8c8d;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+            color: #6b7280;
+            font-size: 13px;
         }
         .date {
-            color: #7f8c8d;
+            color: #6b7280;
             font-size: 13px;
+        }
+        footer {
+            margin-top: 40px;
+            padding-top: 24px;
+            border-top: 1px solid #e5e7eb;
+            text-align: center;
+            color: #9ca3af;
+            font-size: 13px;
+        }
+        footer p {
+            margin: 0;
+        }
+        @media (max-width: 768px) {
+            body {
+                padding: 20px 10px;
+            }
+            .container {
+                padding: 24px;
+            }
+            h1 {
+                font-size: 24px;
+            }
+            table {
+                font-size: 14px;
+            }
+            th, td {
+                padding: 10px 12px;
+            }
+            th.size, .size {
+                display: none;
+            }
         }
     </style>
 </head>
@@ -109,6 +172,9 @@
                 {{end}}
             </tbody>
         </table>
+        <footer>
+            <p>This page is served by FastHttp</p>
+        </footer>
     </div>
 </body>
 </html>
