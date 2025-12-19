@@ -60,7 +60,7 @@ func (h *CGIHandler) CanHandle(r *http.Request, virtualHost *config.VirtualHost)
 }
 
 // Handle executes CGI programs
-func (h *CGIHandler) Handle(w http.ResponseWriter, r *http.Request, virtualHost *config.VirtualHost) error {
+func (h *CGIHandler) Handle(w http.ResponseWriter, r *http.Request, virtualHost *config.VirtualHost, effectiveDirectoryIndex string) error {
 	urlPath := r.URL.Path
 	fullPath := filepath.Join(virtualHost.DocumentRoot, filepath.Clean(urlPath))
 

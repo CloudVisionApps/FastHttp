@@ -12,5 +12,6 @@ type RequestHandler interface {
 	CanHandle(r *http.Request, virtualHost *config.VirtualHost) bool
 
 	// Handle processes the HTTP request
-	Handle(w http.ResponseWriter, r *http.Request, virtualHost *config.VirtualHost) error
+	// effectiveDirectoryIndex is the resolved directoryIndex (virtual host overrides global)
+	Handle(w http.ResponseWriter, r *http.Request, virtualHost *config.VirtualHost, effectiveDirectoryIndex string) error
 }

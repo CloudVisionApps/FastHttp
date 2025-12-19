@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"fasthttp/config"
@@ -40,7 +38,7 @@ func (h *ProxyHandler) CanHandle(r *http.Request, virtualHost *config.VirtualHos
 }
 
 // Handle proxies requests to Unix socket backend
-func (h *ProxyHandler) Handle(w http.ResponseWriter, r *http.Request, virtualHost *config.VirtualHost) error {
+func (h *ProxyHandler) Handle(w http.ResponseWriter, r *http.Request, virtualHost *config.VirtualHost, effectiveDirectoryIndex string) error {
 	unixSocket := virtualHost.ProxyUnixSocket
 	if unixSocket == "" {
 		http.Error(w, "Proxy not configured", http.StatusBadGateway)
@@ -55,7 +53,7 @@ func (h *ProxyHandler) Handle(w http.ResponseWriter, r *http.Request, virtualHos
 
 	// Handle FastCGI proxy
 	if proxyType == "fcgi" {
-		return h.handleFCGIProxy(w, r, virtualHost, unixSocket)
+		return h.handleFCGIProxy(w, r, virtualHost, unixSocket, effectiveDirectoryIndex)
 	}
 
 	// Handle HTTP proxy (default)
@@ -63,7 +61,7 @@ func (h *ProxyHandler) Handle(w http.ResponseWriter, r *http.Request, virtualHos
 }
 
 // handleFCGIProxy handles FastCGI proxying over Unix socket
-func (h *ProxyHandler) handleFCGIProxy(w http.ResponseWriter, r *http.Request, virtualHost *config.VirtualHost, unixSocket string) error {
+func (h *ProxyHandler) handleFCGIProxy(w http.ResponseWriter, r *http.Request, virtualHost *config.VirtualHost, unixSocket string, effectiveDirectoryIndex string) error {
 	log.Printf("Proxying FCGI request to Unix socket: %s", unixSocket)
 
 	// Determine the script path
@@ -78,18 +76,10 @@ func (h *ProxyHandler) handleFCGIProxy(w http.ResponseWriter, r *http.Request, v
 
 	// If script path is empty or root, try to find a default file
 	if scriptPath == "/" || scriptPath == "" {
-		// Try common index files
-		indexFiles := []string{"index.php", "index.html", "index.htm"}
-		if virtualHost.DirectoryIndex != "" {
-			indexFiles = append([]string{virtualHost.DirectoryIndex}, indexFiles...)
-		}
-
-		for _, indexFile := range indexFiles {
-			fullPath := filepath.Join(virtualHost.DocumentRoot, indexFile)
-			if _, err := os.Stat(fullPath); err == nil {
-				scriptPath = "/" + indexFile
-				break
-			}
+		// Use Apache-style index file lookup
+		indexFile := utils.FindIndexFile(virtualHost.DocumentRoot, effectiveDirectoryIndex)
+		if indexFile != "" {
+			scriptPath = "/" + indexFile
 		}
 	}
 

@@ -18,7 +18,7 @@ type Handler struct {
 func New(cfg *config.Config) *Handler {
 	return &Handler{
 		config: cfg,
-		router: NewRouter(),
+		router: NewRouter(cfg),
 	}
 }
 

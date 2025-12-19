@@ -31,11 +31,18 @@ func (h *PHPHandler) CanHandle(r *http.Request, virtualHost *config.VirtualHost)
 }
 
 // Handle processes PHP requests via FastCGI
-func (h *PHPHandler) Handle(w http.ResponseWriter, r *http.Request, virtualHost *config.VirtualHost) error {
+func (h *PHPHandler) Handle(w http.ResponseWriter, r *http.Request, virtualHost *config.VirtualHost, effectiveDirectoryIndex string) error {
 	currentUri := r.RequestURI
 	fileName := utils.GetFileName(currentUri)
+	
+	// If root or empty, try to find index file (Apache-style)
 	if fileName == "/" || fileName == "" {
-		fileName = "index.php"
+		indexFile := utils.FindIndexFile(virtualHost.DocumentRoot, effectiveDirectoryIndex)
+		if indexFile != "" {
+			fileName = indexFile
+		} else {
+			fileName = "index.php" // Fallback
+		}
 	}
 
 	log.Printf("Serving PHP file: %s", fileName)
@@ -64,9 +71,5 @@ func (h *PHPHandler) isPHPRequest(uri string) bool {
 	// Check for PHP in query string or path
 	pattern := `^.*\.php(\?.*)?$`
 	re := regexp.MustCompile(pattern)
-	if re.MatchString(uri) {
-		return true
-	}
-
-	return false
+	return re.MatchString(uri)
 }

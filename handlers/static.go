@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"fasthttp/config"
+	"fasthttp/utils"
 )
 
 // StaticFileHandler handles static file serving and directory listings
@@ -29,7 +30,7 @@ func (h *StaticFileHandler) CanHandle(r *http.Request, virtualHost *config.Virtu
 }
 
 // Handle serves static files or directory listings
-func (h *StaticFileHandler) Handle(w http.ResponseWriter, r *http.Request, virtualHost *config.VirtualHost) error {
+func (h *StaticFileHandler) Handle(w http.ResponseWriter, r *http.Request, virtualHost *config.VirtualHost, effectiveDirectoryIndex string) error {
 	// Parse the request path
 	urlPath := r.URL.Path
 	if !strings.HasPrefix(urlPath, "/") {
@@ -49,20 +50,13 @@ func (h *StaticFileHandler) Handle(w http.ResponseWriter, r *http.Request, virtu
 
 	// If it's a directory, check for index files or show directory listing
 	if info.IsDir() {
-		// Check for index files
-		indexFiles := []string{"index.html", "index.htm", "index.php"}
-		if virtualHost.DirectoryIndex != "" {
-			indexFiles = append([]string{virtualHost.DirectoryIndex}, indexFiles...)
-		}
-
-		for _, indexFile := range indexFiles {
-			indexPath := filepath.Join(fullPath, indexFile)
-			if _, err := os.Stat(indexPath); err == nil {
-				// Index file exists, serve it
-				r.URL.Path = filepath.Join(urlPath, indexFile)
-				http.FileServer(http.Dir(virtualHost.DocumentRoot)).ServeHTTP(w, r)
-				return nil
-			}
+		// Check for index files using Apache-style order
+		indexFile := utils.FindIndexFile(fullPath, effectiveDirectoryIndex)
+		if indexFile != "" {
+			// Index file exists, serve it
+			r.URL.Path = filepath.Join(urlPath, indexFile)
+			http.FileServer(http.Dir(virtualHost.DocumentRoot)).ServeHTTP(w, r)
+			return nil
 		}
 
 		// No index file found, show directory listing with template

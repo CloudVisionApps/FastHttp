@@ -39,6 +39,7 @@ type Config struct {
 	HttpPort              string        `json:"httpPort"`
 	HttpsPort             string        `json:"httpsPort"`
 	MimeTypes             []MimeType    `json:"mimeTypes"`
+	DirectoryIndex        string        `json:"directoryIndex"`        // Global default directory index
 	RateLimitRequests     int           `json:"rateLimitRequests"`
 	RateLimitWindowSeconds int          `json:"rateLimitWindowSeconds"`
 }
@@ -78,4 +79,13 @@ func (c *Config) GetRateLimitConfig() (maxRequests, windowSeconds int) {
 		windowSeconds = 60 // Default: 60 seconds window
 	}
 	return maxRequests, windowSeconds
+}
+
+// GetDirectoryIndex returns the directory index for a virtual host
+// Uses virtual host setting if set, otherwise falls back to global default
+func (c *Config) GetDirectoryIndex(virtualHost *VirtualHost) string {
+	if virtualHost != nil && virtualHost.DirectoryIndex != "" {
+		return virtualHost.DirectoryIndex
+	}
+	return c.DirectoryIndex
 }

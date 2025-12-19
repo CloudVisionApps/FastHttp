@@ -17,3 +17,32 @@ sudo lsof -i:80 -t | xargs -r sudo kill
   "proxyUnixSocket": "/var/run/app.sock",
   "proxyPath": "/api"
 }
+
+
+
+
+
+
+{
+  "portType": "http",
+  "serverName": "example.com",
+  "documentRoot": "/var/www/html",
+  "user": "www-data",
+  "group": "www-data",
+  
+  // Directory indexing (Apache-style)
+  "directoryIndex": "index.php index.html index.htm",
+  
+  // PHP FastCGI (TCP connection)
+  "phpProxyFCGI": "127.0.0.1:9000",
+  
+  // Proxy configuration
+  "proxyUnixSocket": "/var/run/app.sock",
+  "proxyType": "fcgi",  // or "http"
+  "proxyPath": "/api",  // Optional: only proxy this path
+  
+  // CGI configuration
+  "cgiPath": "/cgi-bin"  // Path prefix for CGI scripts
+}
+
+
