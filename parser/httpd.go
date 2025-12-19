@@ -221,10 +221,12 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 			}
 		} else if directive == "</Directory>" || directive == "</DirectoryMatch>" {
 			if currentLocation != nil && currentVHost != nil {
+				fmt.Printf("  [DEBUG] Closing Directory block, adding location: path=%s, handler=%s, proxySocket=%s\n", currentLocation.Path, currentLocation.Handler, currentLocation.ProxyUnixSocket)
 				currentVHost.Locations = append(currentVHost.Locations, *currentLocation)
 			}
 			currentLocation = nil
 			inDirectory = false
+			inFilesMatch = false
 		} else if directive == "<Location" || directive == "<LocationMatch" {
 			if currentVHost != nil && len(args) > 0 {
 				currentLocation = &config.Location{
@@ -243,23 +245,31 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 			}
 			currentLocation = nil
 			inLocation = false
-		} else if directive == "<FilesMatch" || directive == "<Files" {
-			if currentLocation != nil && len(args) > 0 {
-				// FilesMatch is inside a Directory block, update the location path to match the pattern
-				// The pattern is the regex/file pattern (e.g., "\.php$")
-				pattern := args[0]
-				// Remove quotes if present
-				pattern = strings.Trim(pattern, "\"'")
-				currentLocation.Path = pattern
-				if directive == "<FilesMatch" {
-					currentLocation.MatchType = "regexCaseInsensitive"
+		} else if directive == "FilesMatch" || directive == "Files" {
+			// Check if this is an opening tag (parseDirective strips < >)
+			if strings.HasPrefix(originalLine, "<") && !strings.HasPrefix(originalLine, "</") {
+				if currentLocation != nil && len(args) > 0 {
+					// FilesMatch is inside a Directory block, update the location path to match the pattern
+					// The pattern is the regex/file pattern (e.g., "\.php$")
+					pattern := args[0]
+					// Remove quotes if present
+					pattern = strings.Trim(pattern, "\"'")
+					currentLocation.Path = pattern
+					if directive == "FilesMatch" {
+						currentLocation.MatchType = "regexCaseInsensitive"
+					} else {
+						currentLocation.MatchType = "regex"
+					}
+					inFilesMatch = true
+					fmt.Printf("  [DEBUG] Started FilesMatch block, pattern=%s, path=%s, inDirectory=%v\n", pattern, currentLocation.Path, inDirectory)
 				} else {
-					currentLocation.MatchType = "regex"
+					fmt.Printf("  [DEBUG] FilesMatch found but currentLocation is nil or no args. inDirectory=%v, currentLocation=%v, args=%v\n", inDirectory, currentLocation != nil, args)
 				}
-				inFilesMatch = true
+			} else if strings.HasPrefix(originalLine, "</") {
+				// Closing tag
+				inFilesMatch = false
+				fmt.Printf("  [DEBUG] Closed FilesMatch block\n")
 			}
-		} else if directive == "</FilesMatch>" || directive == "</Files" {
-			inFilesMatch = false
 		} else if inVHost {
 			// Parse VirtualHost directives
 			p.parseVirtualHostDirective(currentVHost, directive, args)
@@ -267,7 +277,14 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 			// Parse Location/Directory/FilesMatch directives
 			if inLocation || inDirectory || inFilesMatch {
 				if currentLocation != nil {
+					if directive == "sethandler" {
+						fmt.Printf("  [DEBUG] Parsing SetHandler in context: inDirectory=%v, inFilesMatch=%v, directive=%s, args=%v\n", inDirectory, inFilesMatch, directive, args)
+					}
 					p.parseLocationDirective(currentLocation, directive, args)
+				} else {
+					if directive == "sethandler" {
+						fmt.Printf("  [DEBUG] SetHandler found but currentLocation is nil. inDirectory=%v, inFilesMatch=%v\n", inDirectory, inFilesMatch)
+					}
 				}
 			}
 		}
@@ -666,6 +683,8 @@ func (p *ApacheHttpdParser) parseLocationDirective(location *config.Location, di
 	case "sethandler":
 		if len(args) > 0 {
 			handler := args[0]
+			// Remove quotes if present
+			handler = strings.Trim(handler, "\"'")
 			handlerLower := strings.ToLower(handler)
 			
 			// Handle proxy:unix:/path/to/sock|fcgi://localhost/ format
@@ -675,15 +694,17 @@ func (p *ApacheHttpdParser) parseLocationDirective(location *config.Location, di
 				parts := strings.Split(handler, "|")
 				if len(parts) > 0 {
 					unixPart := strings.TrimPrefix(parts[0], "proxy:unix:")
+					unixPart = strings.TrimPrefix(unixPart, "Proxy:unix:")
 					location.Handler = "proxy"
 					location.ProxyUnixSocket = unixPart
 					
 					// Check if it's FCGI
-					if len(parts) > 1 && strings.Contains(parts[1], "fcgi") {
+					if len(parts) > 1 && strings.Contains(strings.ToLower(parts[1]), "fcgi") {
 						location.ProxyType = "fcgi"
 					} else {
 						location.ProxyType = "http"
 					}
+					fmt.Printf("  [DEBUG] SetHandler parsed: handler=%s, socket=%s, type=%s\n", location.Handler, location.ProxyUnixSocket, location.ProxyType)
 				}
 			} else {
 				// Handle other handler types
