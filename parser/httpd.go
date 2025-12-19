@@ -368,6 +368,7 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 					// Remove quotes if present and any trailing >
 					pattern = strings.Trim(pattern, "\"' >")
 					currentLocation.Path = pattern
+					currentLocation.MatchAgainstFilename = true // FilesMatch/Files patterns match against filename only
 					if directive == "FilesMatch" {
 						currentLocation.MatchType = "regexCaseInsensitive"
 					} else {

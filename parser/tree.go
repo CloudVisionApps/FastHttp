@@ -142,9 +142,12 @@ func (n *ConfigNode) FindLocations() []*ConfigNode {
 	return n.FindChildren("Location")
 }
 
-// FindFilesMatch finds all FilesMatch nodes
+// FindFilesMatch finds all FilesMatch and Files nodes
 func (n *ConfigNode) FindFilesMatch() []*ConfigNode {
-	return n.FindChildren("FilesMatch")
+	var nodes []*ConfigNode
+	nodes = append(nodes, n.FindChildren("FilesMatch")...)
+	nodes = append(nodes, n.FindChildren("Files")...)
+	return nodes
 }
 
 // IsInVirtualHost checks if this node is inside a VirtualHost block
@@ -440,91 +443,84 @@ func (n *ConfigNode) convertToVirtualHost() *config.VirtualHost {
 }
 
 // convertToLocations converts a Directory/Location node to one or more config.Location
-// If there are FilesMatch blocks inside, each FilesMatch creates a separate location
+// If there are FilesMatch blocks inside, they become match rules within a single location
 func (n *ConfigNode) convertToLocations() []config.Location {
 	var locations []config.Location
 
-	// If there are FilesMatch blocks, create a location for each
-	filesMatchNodes := n.FindFilesMatch()
-	if len(filesMatchNodes) > 0 {
-		for _, filesMatchNode := range filesMatchNodes {
-			location := &config.Location{
-				Handler:   "static",
-				MatchType: "regexCaseInsensitive",
-			}
-
-			// Get path from FilesMatch arguments
-			if len(filesMatchNode.Arguments) > 0 {
-				location.Path = strings.Trim(filesMatchNode.Arguments[0], "\"'")
-			}
-
-			// Extract SetHandler from FilesMatch if present
-			if handler := filesMatchNode.GetDirective("SetHandler"); handler != "" {
-				location = parseSetHandler(handler, location)
-			}
-
-			// Also inherit directives from parent Directory
-			if proxyPass := n.GetDirective("ProxyPass"); proxyPass != "" {
-				location.Handler = "proxy"
-				// For ProxyPass, the path is the target URL, not the location path
-				// We'll use the location's Path for matching, and ProxyUnixSocket/ProxyType for proxy config
-				location.ProxyType = "http"
-			}
-			if directoryIndex := n.GetDirective("DirectoryIndex"); directoryIndex != "" {
-				location.DirectoryIndex = directoryIndex
-			}
-
-			locations = append(locations, *location)
-		}
-	} else {
-		// No FilesMatch blocks, create location from Directory/Location itself
-		location := &config.Location{
-			Handler:   "static",
-			MatchType: "prefix",
-		}
-
-		// Get path from arguments
-		if len(n.Arguments) > 0 {
-			location.Path = strings.Trim(n.Arguments[0], "\"'")
-		}
-
-		// Set match type based on node type
-		switch n.Type {
-		case "DirectoryMatch", "LocationMatch":
-			location.MatchType = "regex"
-		case "Files":
-			location.MatchType = "regex"
-		default:
-			location.MatchType = "prefix"
-		}
-
-		// Extract directives from this location block
-		if handler := n.GetDirective("SetHandler"); handler != "" {
-			location = parseSetHandler(handler, location)
-		}
-		if proxyPass := n.GetDirective("ProxyPass"); proxyPass != "" {
-			location.Handler = "proxy"
-			// ProxyPass target URL - for now we'll just set handler and type
-			// The actual proxy target would need to be stored elsewhere or parsed differently
-			location.ProxyType = "http"
-		}
-		if proxyPassMatch := n.GetDirective("ProxyPassMatch"); proxyPassMatch != "" {
-			location.Handler = "proxy"
-			// ProxyPassMatch target URL
-			location.ProxyType = "http"
-			location.MatchType = "regex"
-		}
-		if scriptAlias := n.GetDirective("ScriptAlias"); scriptAlias != "" {
-			location.Handler = "cgi"
-			location.CGIPath = scriptAlias
-		}
-		if directoryIndex := n.GetDirective("DirectoryIndex"); directoryIndex != "" {
-			location.DirectoryIndex = directoryIndex
-		}
-
-		locations = append(locations, *location)
+	// Create location from Directory/Location itself
+	location := &config.Location{
+		Handler:   "static",
+		MatchType: "prefix",
+		MatchRules: []config.MatchRule{},
 	}
 
+	// Get path from arguments
+	if len(n.Arguments) > 0 {
+		location.Path = strings.Trim(n.Arguments[0], "\"'")
+	}
+
+	// Set match type based on node type
+	switch n.Type {
+	case "DirectoryMatch", "LocationMatch":
+		location.MatchType = "regex"
+	case "Files":
+		location.MatchType = "regex"
+	default:
+		location.MatchType = "prefix"
+	}
+
+	// Extract directives from this location block
+	if handler := n.GetDirective("SetHandler"); handler != "" {
+		location = parseSetHandler(handler, location)
+	}
+	if proxyPass := n.GetDirective("ProxyPass"); proxyPass != "" {
+		location.Handler = "proxy"
+		location.ProxyType = "http"
+	}
+	if proxyPassMatch := n.GetDirective("ProxyPassMatch"); proxyPassMatch != "" {
+		location.Handler = "proxy"
+		location.ProxyType = "http"
+		location.MatchType = "regex"
+	}
+	if scriptAlias := n.GetDirective("ScriptAlias"); scriptAlias != "" {
+		location.Handler = "cgi"
+		location.CGIPath = scriptAlias
+	}
+	if directoryIndex := n.GetDirective("DirectoryIndex"); directoryIndex != "" {
+		location.DirectoryIndex = directoryIndex
+	}
+
+	// If there are FilesMatch or Files blocks, add them as match rules
+	filesMatchNodes := n.FindFilesMatch()
+	if len(filesMatchNodes) > 0 {
+		location.MatchAgainstFilename = true // Indicate this location has file-based matches
+		for _, filesMatchNode := range filesMatchNodes {
+			matchRule := config.MatchRule{
+				Handler: "static",
+			}
+
+			// Set match type based on node type
+			if filesMatchNode.Type == "Files" {
+				matchRule.MatchType = "regex" // Files uses case-sensitive regex
+			} else if filesMatchNode.Type == "FilesMatch" {
+				matchRule.MatchType = "regexCaseInsensitive" // FilesMatch uses case-insensitive regex
+			}
+
+			// Get path from FilesMatch/Files arguments
+			if len(filesMatchNode.Arguments) > 0 {
+				matchRule.Path = strings.Trim(filesMatchNode.Arguments[0], "\"'")
+			}
+
+			// Extract SetHandler from FilesMatch/Files if present
+			if handler := filesMatchNode.GetDirective("SetHandler"); handler != "" {
+				matchRule = *parseSetHandlerForMatchRule(handler, &matchRule)
+			}
+
+			location.MatchRules = append(location.MatchRules, matchRule)
+		}
+	}
+
+	locations = append(locations, *location)
 	return locations
 }
 
@@ -621,4 +617,33 @@ func parseSetHandler(handler string, location *config.Location) *config.Location
 	}
 	
 	return location
+}
+
+func parseSetHandlerForMatchRule(handler string, matchRule *config.MatchRule) *config.MatchRule {
+	// Parse SetHandler format: "proxy:unix:/path|fcgi://localhost/"
+	handler = strings.Trim(handler, "\"'")
+	
+	if strings.HasPrefix(handler, "proxy:unix:") {
+		// Format: proxy:unix:/path|fcgi://localhost/
+		parts := strings.Split(handler, "|")
+		if len(parts) >= 1 {
+			unixPart := strings.TrimPrefix(parts[0], "proxy:unix:")
+			matchRule.ProxyUnixSocket = unixPart
+		}
+		if len(parts) >= 2 {
+			proxyPart := parts[1]
+			if strings.Contains(proxyPart, "fcgi://") {
+				matchRule.ProxyType = "fcgi"
+			} else {
+				matchRule.ProxyType = "http"
+			}
+		}
+		matchRule.Handler = "proxy"
+	} else if strings.Contains(handler, "php") {
+		matchRule.Handler = "php"
+	} else if strings.Contains(handler, "cgi") {
+		matchRule.Handler = "cgi"
+	}
+	
+	return matchRule
 }

@@ -29,9 +29,12 @@ func NewRouter(cfg *config.Config) *Router {
 // HandleRequest routes the request to the appropriate handler
 func (r *Router) HandleRequest(w http.ResponseWriter, req *http.Request, virtualHost *config.VirtualHost) {
 	// Check for location-based configuration first
-	location, hasLocation := virtualHost.GetLocationForPath(req.URL.Path)
+	location, matchRule, hasLocation := virtualHost.GetLocationForPath(req.URL.Path)
 	
 	var effectiveDirectoryIndex string
+	var handler string
+	var proxyUnixSocket string
+	var proxyType string
 	
 	if hasLocation {
 		// Use location's directoryIndex if set, otherwise virtual host, then global
@@ -40,14 +43,27 @@ func (r *Router) HandleRequest(w http.ResponseWriter, req *http.Request, virtual
 		} else {
 			effectiveDirectoryIndex = r.config.GetDirectoryIndex(virtualHost)
 		}
-		utils.WebServerLog("Using location: %s (handler: %s)", location.Path, location.Handler)
+		
+		// If a match rule was found, use its handler/proxy config
+		if matchRule != nil {
+			handler = matchRule.Handler
+			proxyUnixSocket = matchRule.ProxyUnixSocket
+			proxyType = matchRule.ProxyType
+			utils.WebServerLog("Using location: %s, match rule: %s (handler: %s)", location.Path, matchRule.Path, handler)
+		} else {
+			// Use location's own handler/proxy config
+			handler = location.Handler
+			proxyUnixSocket = location.ProxyUnixSocket
+			proxyType = location.ProxyType
+			utils.WebServerLog("Using location: %s (handler: %s)", location.Path, handler)
+		}
 	} else {
 		effectiveDirectoryIndex = r.config.GetDirectoryIndex(virtualHost)
 	}
 	
-	// If location specifies a handler, route to that handler type
-	if hasLocation && location.Handler != "" {
-		r.handleLocationRequest(w, req, virtualHost, location, effectiveDirectoryIndex)
+	// If location/match rule specifies a handler, route to that handler type
+	if hasLocation && handler != "" {
+		r.handleLocationRequest(w, req, virtualHost, location, matchRule, handler, proxyUnixSocket, proxyType, effectiveDirectoryIndex)
 		return
 	}
 	
@@ -72,44 +88,51 @@ func (r *Router) HandleRequest(w http.ResponseWriter, req *http.Request, virtual
 }
 
 // handleLocationRequest handles requests for location blocks
-func (r *Router) handleLocationRequest(w http.ResponseWriter, req *http.Request, virtualHost *config.VirtualHost, location *config.Location, effectiveDirectoryIndex string) {
-	switch location.Handler {
+func (r *Router) handleLocationRequest(w http.ResponseWriter, req *http.Request, virtualHost *config.VirtualHost, location *config.Location, matchRule *config.MatchRule, handler string, proxyUnixSocket string, proxyType string, effectiveDirectoryIndex string) {
+	switch handler {
 	case "proxy":
-		handler := NewProxyHandler()
-		// Create a temporary virtual host with location's proxy config
+		proxyHandler := NewProxyHandler()
+		// Create a temporary virtual host with proxy config (from match rule or location)
 		tempVHost := *virtualHost
-		tempVHost.ProxyUnixSocket = location.ProxyUnixSocket
-		tempVHost.ProxyType = location.ProxyType
+		tempVHost.ProxyUnixSocket = proxyUnixSocket
+		tempVHost.ProxyType = proxyType
 		tempVHost.ProxyPath = location.Path
-		if err := handler.Handle(w, req, &tempVHost, effectiveDirectoryIndex); err != nil {
+		if err := proxyHandler.Handle(w, req, &tempVHost, effectiveDirectoryIndex); err != nil {
 			utils.ErrorLog("Location proxy handler error: %v", err)
 		}
 	case "cgi":
-		handler := NewCGIHandler()
+		cgiHandler := NewCGIHandler()
 		// Create a temporary virtual host with location's CGI config
 		tempVHost := *virtualHost
-		tempVHost.CGIPath = location.CGIPath
-		if location.CGIPath == "" {
+		if matchRule != nil && matchRule.CGIPath != "" {
+			tempVHost.CGIPath = matchRule.CGIPath
+		} else if location.CGIPath != "" {
+			tempVHost.CGIPath = location.CGIPath
+		} else {
 			tempVHost.CGIPath = location.Path
 		}
-		if err := handler.Handle(w, req, &tempVHost, effectiveDirectoryIndex); err != nil {
+		if err := cgiHandler.Handle(w, req, &tempVHost, effectiveDirectoryIndex); err != nil {
 			utils.ErrorLog("Location CGI handler error: %v", err)
 		}
 	case "php":
-		handler := NewPHPHandler()
-		// Create a temporary virtual host with location's PHP config
+		phpHandler := NewPHPHandler()
+		// Create a temporary virtual host with PHP config (from match rule or location)
 		tempVHost := *virtualHost
-		tempVHost.PHPProxyFCGI = location.PHPProxyFCGI
-		if err := handler.Handle(w, req, &tempVHost, effectiveDirectoryIndex); err != nil {
+		if matchRule != nil && matchRule.PHPProxyFCGI != "" {
+			tempVHost.PHPProxyFCGI = matchRule.PHPProxyFCGI
+		} else {
+			tempVHost.PHPProxyFCGI = location.PHPProxyFCGI
+		}
+		if err := phpHandler.Handle(w, req, &tempVHost, effectiveDirectoryIndex); err != nil {
 			utils.ErrorLog("Location PHP handler error: %v", err)
 		}
 	case "static":
-		handler := NewStaticFileHandler()
-		if err := handler.Handle(w, req, virtualHost, effectiveDirectoryIndex); err != nil {
+		staticHandler := NewStaticFileHandler()
+		if err := staticHandler.Handle(w, req, virtualHost, effectiveDirectoryIndex); err != nil {
 			utils.ErrorLog("Location static handler error: %v", err)
 		}
 	default:
-		utils.ErrorLog("Unknown location handler type: %s", location.Handler)
+		utils.ErrorLog("Unknown location handler type: %s", handler)
 		http.Error(w, "Configuration error", http.StatusInternalServerError)
 	}
 }

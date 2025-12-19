@@ -16,16 +16,33 @@ type LogEntry struct {
 	Format string `json:"format"` // Log format name (e.g., "combined", "common") - optional
 }
 
+// MatchRule represents a single match pattern with its handler configuration
+// Used for FilesMatch/Files blocks within a Directory
+type MatchRule struct {
+	Path            string `json:"path"`            // Regex pattern to match (e.g., "\.php$")
+	MatchType       string `json:"matchType"`       // Match type: "regex", "regexCaseInsensitive"
+	Handler         string `json:"handler"`         // Handler type: "proxy", "cgi", "php", "static"
+	ProxyUnixSocket string `json:"proxyUnixSocket"` // Unix socket for proxy handler
+	ProxyType       string `json:"proxyType"`       // Proxy type: "http" or "fcgi"
+	CGIPath         string `json:"cgiPath"`         // CGI path
+	PHPProxyFCGI    string `json:"phpProxyFCGI"`   // PHP FastCGI address (TCP)
+	
+	// Internal: compiled regex (not in JSON)
+	regex *regexp.Regexp
+}
+
 // Location represents a location/directory block within a virtual host
 type Location struct {
 	Path            string `json:"path"`            // Path prefix to match (e.g., "/api", "/cgi-bin") OR regex pattern if matchType is "regex"
 	MatchType       string `json:"matchType"`       // Match type: "prefix" (default), "regex", "regexCaseInsensitive"
-	Handler         string `json:"handler"`         // Handler type: "proxy", "cgi", "php", "static"
-	ProxyUnixSocket string `json:"proxyUnixSocket"` // Unix socket for proxy handler
-	ProxyType       string `json:"proxyType"`       // Proxy type: "http" or "fcgi"
+	Handler         string `json:"handler"`         // Handler type: "proxy", "cgi", "php", "static" (for backward compatibility)
+	ProxyUnixSocket string `json:"proxyUnixSocket"` // Unix socket for proxy handler (for backward compatibility)
+	ProxyType       string `json:"proxyType"`       // Proxy type: "http" or "fcgi" (for backward compatibility)
 	CGIPath         string `json:"cgiPath"`         // CGI path (usually same as path)
 	PHPProxyFCGI    string `json:"phpProxyFCGI"`   // PHP FastCGI address (TCP)
 	DirectoryIndex  string `json:"directoryIndex"`  // Directory index for this location
+	MatchAgainstFilename bool `json:"matchAgainstFilename"` // If true, match pattern against filename only (for FilesMatch/Files blocks)
+	MatchRules      []MatchRule `json:"matchRules"` // Multiple match rules (for multiple FilesMatch blocks within a Directory)
 	
 	// Internal: compiled regex (not in JSON)
 	regex *regexp.Regexp
@@ -390,7 +407,7 @@ func (c *Config) GetDirectoryIndex(virtualHost *VirtualHost) string {
 	return c.DirectoryIndex
 }
 
-// CompileLocationRegexes compiles regex patterns for all locations
+// CompileLocationRegexes compiles regex patterns for all locations and match rules
 // Should be called after loading configuration
 func (v *VirtualHost) CompileLocationRegexes() error {
 	for i := range v.Locations {
@@ -411,15 +428,48 @@ func (v *VirtualHost) CompileLocationRegexes() error {
 				return fmt.Errorf("invalid regex pattern in location %s: %w", loc.Path, err)
 			}
 		}
+
+		// Compile regexes for match rules
+		for j := range loc.MatchRules {
+			rule := &loc.MatchRules[j]
+			matchType := strings.ToLower(rule.MatchType)
+			if matchType == "regex" || matchType == "regexcaseinsensitive" {
+				var err error
+				if matchType == "regexcaseinsensitive" {
+					rule.regex, err = regexp.Compile("(?i)" + rule.Path)
+				} else {
+					rule.regex, err = regexp.Compile(rule.Path)
+				}
+				if err != nil {
+					return fmt.Errorf("invalid regex pattern in match rule %s: %w", rule.Path, err)
+				}
+			}
+		}
 	}
 	return nil
 }
 
 // GetLocationForPath finds the matching location block for a given path
-// Returns the location and true if found, nil and false otherwise
-// Priority: regex matches first (in order), then longest path prefix
-func (v *VirtualHost) GetLocationForPath(path string) (*Location, bool) {
-	// First, check regex matches (they have higher priority)
+// Returns the location, matching rule (if any), and true if found, nil and false otherwise
+// Priority: match rules first (in order), then location's own regex, then longest path prefix
+func (v *VirtualHost) GetLocationForPath(path string) (*Location, *MatchRule, bool) {
+	// First, check match rules within locations (they have highest priority)
+	for i := range v.Locations {
+		loc := &v.Locations[i]
+		for j := range loc.MatchRules {
+			rule := &loc.MatchRules[j]
+			matchType := strings.ToLower(rule.MatchType)
+			if (matchType == "regex" || matchType == "regexcaseinsensitive") && rule.regex != nil {
+				// Match rules always match against filename
+				matchString := filepath.Base(path)
+				if rule.regex.MatchString(matchString) {
+					return loc, rule, true
+				}
+			}
+		}
+	}
+
+	// Then, check location's own regex pattern
 	for i := range v.Locations {
 		loc := &v.Locations[i]
 		matchType := strings.ToLower(loc.MatchType)
@@ -428,8 +478,13 @@ func (v *VirtualHost) GetLocationForPath(path string) (*Location, bool) {
 		}
 
 		if (matchType == "regex" || matchType == "regexcaseinsensitive") && loc.regex != nil {
-			if loc.regex.MatchString(path) {
-				return loc, true
+			// For file-based matches (FilesMatch/Files), match against filename only
+			matchString := path
+			if loc.MatchAgainstFilename {
+				matchString = filepath.Base(path)
+			}
+			if loc.regex.MatchString(matchString) {
+				return loc, nil, true
 			}
 		}
 	}
@@ -455,7 +510,7 @@ func (v *VirtualHost) GetLocationForPath(path string) (*Location, bool) {
 	}
 
 	if bestMatch != nil {
-		return bestMatch, true
+		return bestMatch, nil, true
 	}
-	return nil, false
+	return nil, nil, false
 }
