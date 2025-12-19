@@ -24,13 +24,20 @@ func NewProxyHandler() *ProxyHandler {
 
 // CanHandle returns true if this is a proxy request
 func (h *ProxyHandler) CanHandle(r *http.Request, virtualHost *config.VirtualHost) bool {
-	// Check if proxy configuration exists
-	if virtualHost.ProxyUnixSocket != "" {
-		return true
+	// If ProxyPath is set, only handle requests matching that path
+	if virtualHost.ProxyPath != "" {
+		return strings.HasPrefix(r.URL.Path, virtualHost.ProxyPath)
 	}
 
-	// Check if URL path matches proxy path prefix
-	if virtualHost.ProxyPath != "" && strings.HasPrefix(r.URL.Path, virtualHost.ProxyPath) {
+	// If ProxyUnixSocket is set without ProxyPath, check if it's NOT a directory request
+	// Directory requests should be handled by StaticFileHandler to show directory listing
+	if virtualHost.ProxyUnixSocket != "" {
+		urlPath := r.URL.Path
+		// Don't handle root or directory paths - let StaticFileHandler show directory listing
+		if urlPath == "/" || strings.HasSuffix(urlPath, "/") {
+			return false
+		}
+		// For file requests, proxy them
 		return true
 	}
 
