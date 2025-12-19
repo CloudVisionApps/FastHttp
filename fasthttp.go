@@ -365,16 +365,34 @@ func cleanValue(v reflect.Value) interface{} {
 				jsonName = fieldType.Name
 			}
 			
-			// Skip if field is empty/zero
-			if isEmptyValue(field) {
+			// Recursively clean nested values first
+			cleaned := cleanValue(field)
+			if cleaned == nil {
 				continue
 			}
 			
-			// Recursively clean nested values
-			cleaned := cleanValue(field)
-			if cleaned != nil {
-				result[jsonName] = cleaned
+			// Check if cleaned value is actually non-empty
+			cleanedVal := reflect.ValueOf(cleaned)
+			if isEmptyValue(cleanedVal) {
+				continue
 			}
+			
+			// For maps, check if they have any entries
+			if cleanedVal.Kind() == reflect.Map {
+				if cleanedVal.Len() == 0 {
+					continue
+				}
+			}
+			
+			// For slices, check if they have any entries
+			if cleanedVal.Kind() == reflect.Slice {
+				if cleanedVal.Len() == 0 {
+					continue
+				}
+			}
+			
+			// Add the cleaned value
+			result[jsonName] = cleaned
 		}
 		if len(result) == 0 {
 			return nil
@@ -388,7 +406,28 @@ func cleanValue(v reflect.Value) interface{} {
 		result := make([]interface{}, 0, v.Len())
 		for i := 0; i < v.Len(); i++ {
 			cleaned := cleanValue(v.Index(i))
-			if cleaned != nil && !isEmptyValue(reflect.ValueOf(cleaned)) {
+			if cleaned == nil {
+				continue
+			}
+			
+			// Check if cleaned value is actually non-empty
+			cleanedVal := reflect.ValueOf(cleaned)
+			if isEmptyValue(cleanedVal) {
+				continue
+			}
+			
+			// For maps, only include if they have entries
+			if cleanedVal.Kind() == reflect.Map {
+				if cleanedVal.Len() > 0 {
+					result = append(result, cleaned)
+				}
+			} else if cleanedVal.Kind() == reflect.Slice {
+				// For slices, only include if they have entries
+				if cleanedVal.Len() > 0 {
+					result = append(result, cleaned)
+				}
+			} else {
+				// For other types, include if not empty
 				result = append(result, cleaned)
 			}
 		}
@@ -440,7 +479,7 @@ func isEmptyValue(v reflect.Value) bool {
 	case reflect.Float32, reflect.Float64:
 		return v.Float() == 0
 	case reflect.Bool:
-		return !v.Bool() // Include false booleans, but you might want to skip them
+		return !v.Bool() // Skip false booleans
 	case reflect.Slice, reflect.Map, reflect.Array:
 		return v.Len() == 0
 	case reflect.Ptr, reflect.Interface:
