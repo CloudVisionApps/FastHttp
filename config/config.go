@@ -178,83 +178,109 @@ func parseIncludeField(include interface{}) []string {
 // mergeConfig merges an included config into the base config
 // Arrays are appended, other fields override if set in included config
 func mergeConfig(base *Config, included *Config) {
-	// Merge arrays (append)
-	if len(included.VirtualHosts) > 0 {
-		base.VirtualHosts = append(base.VirtualHosts, included.VirtualHosts...)
-	}
-	if len(included.MimeTypes) > 0 {
-		// Merge mime types, avoiding duplicates
-		mimeMap := make(map[string]string)
-		for _, mt := range base.MimeTypes {
-			mimeMap[mt.Ext] = mt.Type
+	baseValue := reflect.ValueOf(base).Elem()
+	includedValue := reflect.ValueOf(included).Elem()
+	baseType := baseValue.Type()
+
+	for i := 0; i < baseType.NumField(); i++ {
+		field := baseType.Field(i)
+		fieldName := field.Name
+
+		// Skip include fields to prevent recursive includes
+		if fieldName == "Include" || fieldName == "Includes" {
+			continue
 		}
-		for _, mt := range included.MimeTypes {
-			if _, exists := mimeMap[mt.Ext]; !exists {
-				base.MimeTypes = append(base.MimeTypes, mt)
+
+		baseField := baseValue.Field(i)
+		includedField := includedValue.Field(i)
+
+		// Skip if included field is zero/empty
+		if !includedField.IsValid() || includedField.IsZero() {
+			continue
+		}
+
+		// Handle arrays (append, avoid duplicates)
+		if baseField.Kind() == reflect.Slice {
+			mergeSlice(baseField, includedField, fieldName)
+			continue
+		}
+
+		// Handle scalar fields (override if set)
+		if baseField.CanSet() {
+			// For strings: override if not empty
+			if baseField.Kind() == reflect.String {
+				if includedField.String() != "" {
+					baseField.SetString(includedField.String())
+				}
+			} else if baseField.Kind() == reflect.Int || baseField.Kind() == reflect.Int64 {
+				// For integers: override if greater than 0 (or any non-zero for bool-like)
+				if includedField.Int() > 0 {
+					baseField.SetInt(includedField.Int())
+				}
+			} else if baseField.Kind() == reflect.Bool {
+				// For booleans: override if set to true (to handle false defaults)
+				// This means if included has true, use it; if false, keep base value
+				if includedField.Bool() {
+					baseField.SetBool(true)
+				}
 			}
 		}
 	}
-	if len(included.Listen) > 0 {
-		// Merge listen ports, avoiding duplicates
-		portMap := make(map[string]bool)
-		for _, p := range base.Listen {
-			portMap[p] = true
-		}
-		for _, p := range included.Listen {
-			if !portMap[p] {
-				base.Listen = append(base.Listen, p)
-			}
-		}
-	}
-	if len(included.AdminIPWhitelist) > 0 {
-		// Merge IP whitelist, avoiding duplicates
-		ipMap := make(map[string]bool)
-		for _, ip := range base.AdminIPWhitelist {
-			ipMap[ip] = true
-		}
-		for _, ip := range included.AdminIPWhitelist {
-			if !ipMap[ip] {
-				base.AdminIPWhitelist = append(base.AdminIPWhitelist, ip)
-			}
-		}
+}
+
+// mergeSlice merges slice fields, appending and avoiding duplicates
+func mergeSlice(baseField, includedField reflect.Value, fieldName string) {
+	if !baseField.IsValid() || !includedField.IsValid() {
+		return
 	}
 
-	// Override scalar fields if set in included config
-	if included.User != "" {
-		base.User = included.User
+	baseLen := baseField.Len()
+	includedLen := includedField.Len()
+
+	if includedLen == 0 {
+		return
 	}
-	if included.Group != "" {
-		base.Group = included.Group
+
+	// Special handling for MimeTypes (deduplicate by Ext)
+	if fieldName == "MimeTypes" {
+		mimeMap := make(map[string]string)
+		for i := 0; i < baseLen; i++ {
+			mt := baseField.Index(i)
+			ext := mt.FieldByName("Ext").String()
+			typ := mt.FieldByName("Type").String()
+			mimeMap[ext] = typ
+		}
+
+		for i := 0; i < includedLen; i++ {
+			mt := includedField.Index(i)
+			ext := mt.FieldByName("Ext").String()
+			if _, exists := mimeMap[ext]; !exists {
+				baseField.Set(reflect.Append(baseField, mt))
+			}
+		}
+		return
 	}
-	if included.ServerAdmin != "" {
-		base.ServerAdmin = included.ServerAdmin
-	}
-	if included.DirectoryIndex != "" {
-		base.DirectoryIndex = included.DirectoryIndex
-	}
-	if included.RateLimitRequests > 0 {
-		base.RateLimitRequests = included.RateLimitRequests
-	}
-	if included.RateLimitWindowSeconds > 0 {
-		base.RateLimitWindowSeconds = included.RateLimitWindowSeconds
-	}
-	if included.AdminPort != "" {
-		base.AdminPort = included.AdminPort
-	}
-	// AdminEnabled and AdminAuthEnabled: only override if explicitly set (not just default false)
-	// This is tricky with JSON, so we'll use a pointer or check if it was in the original
-	// For simplicity, we'll override if the included config has it set
-	if included.AdminEnabled {
-		base.AdminEnabled = included.AdminEnabled
-	}
-	if included.AdminAuthEnabled {
-		base.AdminAuthEnabled = included.AdminAuthEnabled
-	}
-	if included.AdminUsername != "" {
-		base.AdminUsername = included.AdminUsername
-	}
-	if included.AdminPassword != "" {
-		base.AdminPassword = included.AdminPassword
+
+	// For other slices (VirtualHosts, Listen, AdminIPWhitelist), use map for deduplication
+	if baseField.Type().Elem().Kind() == reflect.String {
+		// String slices: use map to track duplicates
+		valueMap := make(map[string]bool)
+		for i := 0; i < baseLen; i++ {
+			valueMap[baseField.Index(i).String()] = true
+		}
+
+		for i := 0; i < includedLen; i++ {
+			val := includedField.Index(i).String()
+			if !valueMap[val] {
+				baseField.Set(reflect.Append(baseField, includedField.Index(i)))
+				valueMap[val] = true
+			}
+		}
+	} else {
+		// For struct slices (VirtualHosts), just append (no deduplication by default)
+		for i := 0; i < includedLen; i++ {
+			baseField.Set(reflect.Append(baseField, includedField.Index(i)))
+		}
 	}
 }
 
