@@ -33,8 +33,8 @@ type VirtualHost struct {
 	User            string     `json:"user"`
 	Group           string     `json:"group"`
 	ServerAdmin     string     `json:"serverAdmin"`
-	ErrorLog        string     `json:"errorLog"`
-	CustomLog       string     `json:"customLog"`
+	ErrorLog        []string   `json:"errorLog"`       // Array of error log paths (can have multiple)
+	CustomLog       []string   `json:"customLog"`      // Array of custom log paths (can have multiple)
 	DirectoryIndex  string     `json:"directoryIndex"`
 	PHPProxyFCGI    string     `json:"phpProxyFCGI"`
 	CGIPath         string     `json:"cgiPath"`         // Path prefix for CGI scripts (e.g., "/cgi-bin")

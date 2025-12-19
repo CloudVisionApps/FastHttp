@@ -183,6 +183,8 @@ func (n *ConfigNode) ConvertToParsedConfig() *ParsedConfig {
 func (n *ConfigNode) convertToVirtualHost() *config.VirtualHost {
 	vhost := &config.VirtualHost{
 		Locations: []config.Location{},
+		ErrorLog:  []string{},
+		CustomLog: []string{},
 	}
 
 	// Extract listen ports from VirtualHost arguments (e.g., <VirtualHost *:80>)
@@ -261,17 +263,26 @@ func (n *ConfigNode) convertToVirtualHost() *config.VirtualHost {
 	}
 	vhost.ServerAdmin = n.GetDirective("ServerAdmin")
 	
-	// Extract log directives from IfModule blocks
-	vhost.ErrorLog = n.GetDirective("ErrorLog")
-	if vhost.ErrorLog == "" {
-		vhost.ErrorLog = n.getDirectiveFromChildren("ErrorLog")
+	// Extract log directives from IfModule blocks (can have multiple)
+	errorLogs := n.GetDirectiveAll("ErrorLog")
+	errorLogs = append(errorLogs, n.getDirectiveAllFromChildren("ErrorLog")...)
+	// Remove duplicates and empty values
+	errorLogMap := make(map[string]bool)
+	for _, log := range errorLogs {
+		if log != "" && !errorLogMap[log] {
+			vhost.ErrorLog = append(vhost.ErrorLog, log)
+			errorLogMap[log] = true
+		}
 	}
-	vhost.CustomLog = n.GetDirective("CustomLog")
-	if vhost.CustomLog == "" {
-		// CustomLog might appear multiple times, get the first one
-		customLogs := n.getDirectiveAllFromChildren("CustomLog")
-		if len(customLogs) > 0 {
-			vhost.CustomLog = customLogs[0]
+	
+	customLogs := n.GetDirectiveAll("CustomLog")
+	customLogs = append(customLogs, n.getDirectiveAllFromChildren("CustomLog")...)
+	// Remove duplicates and empty values
+	customLogMap := make(map[string]bool)
+	for _, log := range customLogs {
+		if log != "" && !customLogMap[log] {
+			vhost.CustomLog = append(vhost.CustomLog, log)
+			customLogMap[log] = true
 		}
 	}
 	vhost.DirectoryIndex = n.GetDirective("DirectoryIndex")
@@ -420,11 +431,29 @@ func (n *ConfigNode) getDirectiveAllFromChildren(name string) []string {
 	// Get from this node
 	values = append(values, n.GetDirectiveAll(name)...)
 	
-	// Get from all children
+	// Get from all children (including IfModule blocks)
 	for _, child := range n.Children {
-		values = append(values, child.GetDirectiveAll(name)...)
-		// Recursively check nested children
-		values = append(values, child.getDirectiveAllFromChildren(name)...)
+		// Get from child node directly
+		childValues := child.GetDirectiveAll(name)
+		if len(childValues) > 0 {
+			values = append(values, childValues...)
+		}
+		// Recursively check nested children (but avoid double-counting)
+		// Only recurse if we haven't found the directive yet, or if we want all occurrences
+		nestedValues := child.getDirectiveAllFromChildren(name)
+		// Avoid duplicates by checking if we already have these values
+		for _, nv := range nestedValues {
+			found := false
+			for _, v := range values {
+				if v == nv {
+					found = true
+					break
+				}
+			}
+			if !found {
+				values = append(values, nv)
+			}
+		}
 	}
 	
 	return values
