@@ -231,15 +231,19 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 				} else {
 					fmt.Printf("  [DEBUG] Directory block found but conditions not met. currentVHost=%v, args=%v\n", currentVHost != nil, args)
 				}
+				continue // Skip further processing for opening tag
 			} else if strings.HasPrefix(originalLine, "</") {
-				// Closing tag
+				// Closing tag - handle it here
 				if currentLocation != nil && currentVHost != nil {
-					fmt.Printf("  [DEBUG] Closing Directory block, adding location: path=%s, handler=%s, proxySocket=%s\n", currentLocation.Path, currentLocation.Handler, currentLocation.ProxyUnixSocket)
+					fmt.Printf("  [DEBUG] Closing Directory block, adding location: path=%s, handler=%s, proxySocket=%s, proxyType=%s\n", currentLocation.Path, currentLocation.Handler, currentLocation.ProxyUnixSocket, currentLocation.ProxyType)
 					currentVHost.Locations = append(currentVHost.Locations, *currentLocation)
+				} else {
+					fmt.Printf("  [DEBUG] Closing Directory block but currentLocation=%v, currentVHost=%v\n", currentLocation != nil, currentVHost != nil)
 				}
 				currentLocation = nil
 				inDirectory = false
 				inFilesMatch = false
+				continue // Skip further processing for closing tag
 			}
 		} else if directive == "Location" || directive == "LocationMatch" {
 			// Check if this is an opening tag
@@ -289,6 +293,23 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 				fmt.Printf("  [DEBUG] Closed FilesMatch block\n")
 			}
 		} else if inVHost {
+			// Check for closing Directory tag first (before parsing other directives)
+			if directive == "Directory" || directive == "DirectoryMatch" {
+				if strings.HasPrefix(originalLine, "</") {
+					// Closing tag
+					if currentLocation != nil && currentVHost != nil {
+						fmt.Printf("  [DEBUG] Closing Directory block, adding location: path=%s, handler=%s, proxySocket=%s, proxyType=%s\n", currentLocation.Path, currentLocation.Handler, currentLocation.ProxyUnixSocket, currentLocation.ProxyType)
+						currentVHost.Locations = append(currentVHost.Locations, *currentLocation)
+					} else {
+						fmt.Printf("  [DEBUG] Closing Directory block but currentLocation=%v, currentVHost=%v\n", currentLocation != nil, currentVHost != nil)
+					}
+					currentLocation = nil
+					inDirectory = false
+					inFilesMatch = false
+					continue
+				}
+			}
+			
 			// Parse VirtualHost directives
 			p.parseVirtualHostDirective(currentVHost, directive, args)
 			
