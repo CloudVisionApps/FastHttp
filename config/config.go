@@ -4,25 +4,38 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 )
 
+// Location represents a location/directory block within a virtual host
+type Location struct {
+	Path           string `json:"path"`           // Path prefix to match (e.g., "/api", "/cgi-bin")
+	Handler        string `json:"handler"`        // Handler type: "proxy", "cgi", "php", "static"
+	ProxyUnixSocket string `json:"proxyUnixSocket"` // Unix socket for proxy handler
+	ProxyType      string `json:"proxyType"`      // Proxy type: "http" or "fcgi"
+	CGIPath        string `json:"cgiPath"`        // CGI path (usually same as path)
+	PHPProxyFCGI   string `json:"phpProxyFCGI"`   // PHP FastCGI address (TCP)
+	DirectoryIndex string `json:"directoryIndex"`  // Directory index for this location
+}
+
 type VirtualHost struct {
-	PortType        string   `json:"portType"`
-	Listen          []string `json:"listen"`
-	ServerName      string   `json:"serverName"`
-	ServerAlias     []string `json:"serverAlias"`
-	DocumentRoot    string   `json:"documentRoot"`
-	User            string   `json:"user"`
-	Group           string   `json:"group"`
-	ServerAdmin     string   `json:"serverAdmin"`
-	ErrorLog        string   `json:"errorLog"`
-	CustomLog       string   `json:"customLog"`
-	DirectoryIndex  string   `json:"directoryIndex"`
-	PHPProxyFCGI    string   `json:"phpProxyFCGI"`
-	CGIPath         string   `json:"cgiPath"`         // Path prefix for CGI scripts (e.g., "/cgi-bin")
-	ProxyUnixSocket string   `json:"proxyUnixSocket"` // Unix socket path for proxy (e.g., "/var/run/app.sock")
-	ProxyPath       string   `json:"proxyPath"`       // URL path prefix to proxy (e.g., "/api")
-	ProxyType       string   `json:"proxyType"`       // Proxy type: "http" or "fcgi" (default: "http")
+	PortType        string     `json:"portType"`
+	Listen          []string   `json:"listen"`
+	ServerName      string     `json:"serverName"`
+	ServerAlias     []string   `json:"serverAlias"`
+	DocumentRoot    string     `json:"documentRoot"`
+	User            string     `json:"user"`
+	Group           string     `json:"group"`
+	ServerAdmin     string     `json:"serverAdmin"`
+	ErrorLog        string     `json:"errorLog"`
+	CustomLog       string     `json:"customLog"`
+	DirectoryIndex  string     `json:"directoryIndex"`
+	PHPProxyFCGI    string     `json:"phpProxyFCGI"`
+	CGIPath         string     `json:"cgiPath"`         // Path prefix for CGI scripts (e.g., "/cgi-bin")
+	ProxyUnixSocket string     `json:"proxyUnixSocket"` // Unix socket path for proxy (e.g., "/var/run/app.sock")
+	ProxyPath       string     `json:"proxyPath"`       // URL path prefix to proxy (e.g., "/api")
+	ProxyType       string     `json:"proxyType"`       // Proxy type: "http" or "fcgi" (default: "http")
+	Locations       []Location `json:"locations"`       // Location/directory blocks (like nginx/httpd)
 }
 
 type MimeType struct {
@@ -88,4 +101,27 @@ func (c *Config) GetDirectoryIndex(virtualHost *VirtualHost) string {
 		return virtualHost.DirectoryIndex
 	}
 	return c.DirectoryIndex
+}
+
+// GetLocationForPath finds the matching location block for a given path
+// Returns the location and true if found, nil and false otherwise
+// Locations are matched by longest path prefix
+func (v *VirtualHost) GetLocationForPath(path string) (*Location, bool) {
+	var bestMatch *Location
+	longestMatch := 0
+
+	for i := range v.Locations {
+		loc := &v.Locations[i]
+		if strings.HasPrefix(path, loc.Path) {
+			if len(loc.Path) > longestMatch {
+				longestMatch = len(loc.Path)
+				bestMatch = loc
+			}
+		}
+	}
+
+	if bestMatch != nil {
+		return bestMatch, true
+	}
+	return nil, false
 }

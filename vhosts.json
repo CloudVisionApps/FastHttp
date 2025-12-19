@@ -143,6 +143,75 @@
       }
     }
   ],
+  "locationExamples": [
+    {
+      "name": "Virtual Host with Location Blocks",
+      "description": "Example showing location/directory-based configuration like nginx/httpd",
+      "config": {
+        "portType": "http",
+        "serverName": "example.com",
+        "documentRoot": "/var/www/example.com/public_html",
+        "user": "example",
+        "group": "example",
+        "directoryIndex": "index.php index.html",
+        "locations": [
+          {
+            "path": "/api",
+            "handler": "proxy",
+            "proxyUnixSocket": "/var/run/api-backend.sock",
+            "proxyType": "http"
+          },
+          {
+            "path": "/cgi-bin",
+            "handler": "cgi",
+            "cgiPath": "/cgi-bin"
+          },
+          {
+            "path": "/app",
+            "handler": "proxy",
+            "proxyUnixSocket": "/run/app-fcgi.sock",
+            "proxyType": "fcgi"
+          },
+          {
+            "path": "/static",
+            "handler": "static",
+            "directoryIndex": "index.html"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Mixed Configuration with Locations",
+      "description": "Virtual host with both global and location-specific handlers",
+      "config": {
+        "portType": "http",
+        "serverName": "mixed.example.com",
+        "documentRoot": "/var/www/mixed.example.com/public_html",
+        "user": "mixeduser",
+        "group": "mixeduser",
+        "phpProxyFCGI": "127.0.0.1:9000",
+        "locations": [
+          {
+            "path": "/api/v1",
+            "handler": "proxy",
+            "proxyUnixSocket": "/var/run/api-v1.sock",
+            "proxyType": "http"
+          },
+          {
+            "path": "/api/v2",
+            "handler": "proxy",
+            "proxyUnixSocket": "/var/run/api-v2.sock",
+            "proxyType": "http"
+          },
+          {
+            "path": "/legacy",
+            "handler": "cgi",
+            "cgiPath": "/legacy"
+          }
+        ]
+      }
+    }
+  ],
   "notes": {
     "directoryIndex": "Can be set globally in main config or per virtual host. Virtual host setting overrides global. Default order: index.html, index.htm, index.php",
     "proxyType": "Can be 'http' for HTTP reverse proxy or 'fcgi' for FastCGI proxy. Default is 'http'",
@@ -151,6 +220,7 @@
     "phpProxyFCGI": "TCP address for PHP FastCGI (e.g., '127.0.0.1:9000')",
     "proxyUnixSocket": "Unix socket path for proxy connections (e.g., '/var/run/app.sock')",
     "user": "System user to run processes as (for CGI execution)",
-    "group": "System group to run processes as (for CGI execution)"
+    "group": "System group to run processes as (for CGI execution)",
+    "locations": "Array of location blocks. Each location matches requests by path prefix. Longest matching path wins. Handler types: 'proxy', 'cgi', 'php', 'static'"
   }
 }
