@@ -28,10 +28,109 @@ func (p *ApacheHttpdParser) CanParse(filePath string) bool {
 	return ext == ".conf" || strings.Contains(name, "httpd") || strings.Contains(name, "apache")
 }
 
-// Parse reads and parses an Apache httpd.conf file
-// If called recursively for includes, it will parse the file without processing includes again
+// Parse reads and parses an Apache httpd.conf file using tree-based parsing
 func (p *ApacheHttpdParser) Parse(filePath string) (*ParsedConfig, error) {
-	return p.parseFile(filePath, false)
+	// Parse main file into tree
+	root, err := p.parseFileTree(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Process includes and merge them into the tree
+	includes := root.GetDirectiveAll("Include")
+	includes = append(includes, root.GetDirectiveAll("IncludeOptional")...)
+	
+	if len(includes) > 0 {
+		visited := make(map[string]bool)
+		err := p.processIncludes(root, includes, visited, 0)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Convert tree to ParsedConfig
+	parsed := root.ConvertToParsedConfig()
+	
+	// Add includes to parsed config
+	parsed.Includes = includes
+
+	return parsed, nil
+}
+
+// processIncludes recursively processes include directives
+func (p *ApacheHttpdParser) processIncludes(root *ConfigNode, includes []string, visited map[string]bool, depth int) error {
+	if depth > 10 {
+		return fmt.Errorf("maximum include depth exceeded")
+	}
+
+	for _, includePattern := range includes {
+		includePaths := p.expandIncludePath(includePattern)
+		for _, includePath := range includePaths {
+			absPath, err := filepath.Abs(includePath)
+			if err != nil {
+				continue
+			}
+
+			if visited[absPath] {
+				continue // Skip circular includes
+			}
+			visited[absPath] = true
+
+			// Parse included file
+			includedRoot, err := p.parseFileTree(includePath)
+			if err != nil {
+				fmt.Printf("Warning: Failed to parse included file %s: %v\n", includePath, err)
+				continue
+			}
+
+			// Merge included tree into root
+			p.mergeTree(root, includedRoot)
+
+			// Process nested includes
+			nestedIncludes := includedRoot.GetDirectiveAll("Include")
+			nestedIncludes = append(nestedIncludes, includedRoot.GetDirectiveAll("IncludeOptional")...)
+			if len(nestedIncludes) > 0 {
+				if err := p.processIncludes(root, nestedIncludes, visited, depth+1); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// mergeTree merges an included tree into the root tree
+func (p *ApacheHttpdParser) mergeTree(root, included *ConfigNode) {
+	// Merge global directives
+	for name, values := range included.Directives {
+		if name == "Include" || name == "IncludeOptional" {
+			continue // Skip include directives
+		}
+		// Append values (don't override)
+		existing := root.GetDirectiveAll(name)
+		valueMap := make(map[string]bool)
+		for _, v := range existing {
+			valueMap[v] = true
+		}
+		for _, v := range values {
+			if !valueMap[v] {
+				root.AddDirective(name, []string{v})
+			}
+		}
+	}
+
+	// Add VirtualHosts from included file
+	for _, vhost := range included.FindVirtualHosts() {
+		root.AddChild(vhost)
+	}
+
+	// Add global Directory blocks from included file
+	for _, dir := range included.FindDirectories() {
+		if !dir.IsInVirtualHost() {
+			root.AddChild(dir)
+		}
+	}
 }
 
 // parseFile is the internal parsing method that can skip include processing

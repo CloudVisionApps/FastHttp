@@ -55,17 +55,11 @@ func (c *FastHTTPConverter) Convert(parsed *ParsedConfig, baseConfig *config.Con
 	// Add virtual hosts
 	result.VirtualHosts = append(result.VirtualHosts, parsed.VirtualHosts...)
 
-	// Apply global locations to virtual hosts if they don't have specific locations
-	// Note: We don't automatically create PHP locations from AddHandler directives
-	// PHP locations should only come from explicit <Location> or <Directory> blocks in the Apache config
-
-	// Apply global locations to virtual hosts (if any)
-	if globalLocations, ok := parsed.GlobalConfig["globalLocations"].([]config.Location); ok && len(globalLocations) > 0 {
-		for i := range result.VirtualHosts {
-			// Prepend global locations to each virtual host
-			result.VirtualHosts[i].Locations = append(globalLocations, result.VirtualHosts[i].Locations...)
-		}
-	}
+	// Note: Global locations are NOT automatically applied to virtual hosts
+	// In Apache, global Directory blocks apply server-wide, but in FastHTTP
+	// we only include locations that are explicitly defined within each VirtualHost
+	// or that are truly global and needed. Global locations are stored in
+	// parsed.GlobalConfig["globalLocations"] but not automatically merged.
 
 	// Compile location regexes for all virtual hosts
 	for i := range result.VirtualHosts {
