@@ -156,34 +156,93 @@ func startServer(cfg *config.Config) {
 			}
 		}
 	} else {
-		// Multiple ports - start goroutines for each
-		// For multiple ports, we'll switch user/group before starting (simpler)
-		// Note: This means you need to start as root if any port < 1024
-		if cfg.User != "" || cfg.Group != "" {
-			// Try to switch before binding (will only work if not binding to privileged ports)
-			if err := utils.SwitchUserGroup(cfg.User, cfg.Group); err != nil {
-				utils.ErrorLog("Warning: Could not switch to user/group before binding: %v", err)
-				utils.ErrorLog("If binding to privileged ports (< 1024), start as root")
-			} else {
-				currentUser, currentGroup, _ := utils.GetCurrentUser()
-				utils.WebServerLog("[Web Server] Running as user: %s, group: %s", currentUser, currentGroup)
+		// Multiple ports - need to handle privileged ports correctly
+		// Check if we have any privileged ports and if we're running as root
+		hasPrivilegedPorts := false
+		for _, port := range listenPorts {
+			portNum, _ := strconv.Atoi(port)
+			if portNum < 1024 {
+				hasPrivilegedPorts = true
+				break
 			}
 		}
-		
-		for _, port := range listenPorts {
-			go func(p string) {
-				server := &http.Server{
-					Addr:    ":" + p,
-					Handler: rateLimitHandler,
+
+		// If we have privileged ports and want to drop privileges, we need to:
+		// 1. Create all listeners as root
+		// 2. Drop privileges
+		// 3. Serve on all listeners
+		if hasPrivilegedPorts && (cfg.User != "" || cfg.Group != "") && os.Geteuid() == 0 {
+			// Create all listeners first
+			listeners := make(map[string]net.Listener)
+			for _, port := range listenPorts {
+				listener, err := net.Listen("tcp", ":"+port)
+				if err != nil {
+					utils.ErrorLog("Error creating listener for port %s: %v", port, err)
+					// Close already created listeners
+					for _, l := range listeners {
+						l.Close()
+					}
+					os.Exit(1)
 				}
-				utils.WebServerLog("[Web Server] Starting FastHTTP server on port: %s", p)
-				if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-					utils.ErrorLog("Server failed on port %s: %v", p, err)
+				listeners[port] = listener
+			}
+
+			// Drop privileges after binding
+			if err := utils.SwitchUserGroup(cfg.User, cfg.Group); err != nil {
+				utils.ErrorLog("Error dropping privileges: %v", err)
+				// Close listeners
+				for _, l := range listeners {
+					l.Close()
 				}
-			}(port)
+				os.Exit(1)
+			}
+
+			currentUser, currentGroup, _ := utils.GetCurrentUser()
+			utils.WebServerLog("[Web Server] Dropped privileges, running as user: %s, group: %s", currentUser, currentGroup)
+
+			// Start serving on all listeners
+			for port, listener := range listeners {
+				go func(p string, l net.Listener) {
+					server := &http.Server{
+						Addr:    ":" + p,
+						Handler: rateLimitHandler,
+					}
+					utils.WebServerLog("[Web Server] Starting FastHTTP server on port: %s", p)
+					if err := server.Serve(l); err != nil && err != http.ErrServerClosed {
+						utils.ErrorLog("Server failed on port %s: %v", p, err)
+					}
+				}(port, listener)
+			}
+			// Keep main goroutine alive
+			select {}
+		} else {
+			// No privileged ports or not running as root - can switch user before binding
+			if cfg.User != "" || cfg.Group != "" {
+				// Try to switch before binding (will only work if not binding to privileged ports)
+				if err := utils.SwitchUserGroup(cfg.User, cfg.Group); err != nil {
+					utils.ErrorLog("Warning: Could not switch to user/group before binding: %v", err)
+					utils.ErrorLog("If binding to privileged ports (< 1024), start as root")
+				} else {
+					currentUser, currentGroup, _ := utils.GetCurrentUser()
+					utils.WebServerLog("[Web Server] Running as user: %s, group: %s", currentUser, currentGroup)
+				}
+			}
+
+			for _, port := range listenPorts {
+				go func(p string) {
+					server := &http.Server{
+						Addr:    ":" + p,
+						Handler: rateLimitHandler,
+					}
+					utils.WebServerLog("[Web Server] Starting FastHTTP server on port: %s", p)
+					if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+						utils.ErrorLog("Server failed on port %s: %v", p, err)
+					}
+				}(port)
+			}
+			// Keep main goroutine alive
+			select {}
 		}
-		// Keep main goroutine alive
-		select {}
 	}
 }
 
