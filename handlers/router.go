@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"fasthttp/config"
 	"fasthttp/utils"
@@ -30,8 +31,67 @@ func NewRouter(cfg *config.Config) *Router {
 
 // HandleRequest routes the request to the appropriate handler
 func (r *Router) HandleRequest(w http.ResponseWriter, req *http.Request, virtualHost *config.VirtualHost) {
-	// Check for location-based configuration first
-	location, matchRule, hasLocation := virtualHost.GetLocationForPath(req.URL.Path)
+	// Resolve the request path to filesystem path
+	urlPath := req.URL.Path
+	if urlPath == "" {
+		urlPath = "/"
+	}
+	fullPath := filepath.Join(virtualHost.DocumentRoot, filepath.Clean(urlPath))
+	
+	// Check for location-based configuration
+	// For Directory blocks, we need to check if the filesystem path is within the Directory path
+	var location *config.Location
+	var matchRule *config.MatchRule
+	hasLocation := false
+	
+	// Check each location to see if the request path falls within it
+	for i := range virtualHost.Locations {
+		loc := &virtualHost.Locations[i]
+		// Check if this location's path (filesystem path from Directory) contains the request path
+		// For Directory blocks, the path is a filesystem path
+		// Normalize paths for comparison
+		locPath := filepath.Clean(loc.Path)
+		reqPath := filepath.Clean(fullPath)
+		
+		// Check if request path is within the Directory path
+		if strings.HasPrefix(reqPath, locPath) || reqPath == locPath {
+			location = loc
+			hasLocation = true
+			
+			// Check match rules against the URL path or resolved index file
+			if len(loc.MatchRules) > 0 {
+				// First check against the URL path filename
+				urlFilename := filepath.Base(urlPath)
+				if urlFilename == "/" || urlFilename == "" {
+					urlFilename = ""
+				}
+				
+				// If it's a directory, check against index file
+				if info, err := os.Stat(fullPath); err == nil && info.IsDir() {
+					effectiveDirectoryIndex := r.config.GetDirectoryIndex(virtualHost)
+					if loc.DirectoryIndex != "" {
+						effectiveDirectoryIndex = loc.DirectoryIndex
+					}
+					indexFile := utils.FindIndexFile(fullPath, effectiveDirectoryIndex)
+					if indexFile != "" {
+						urlFilename = indexFile
+					}
+				}
+				
+				// Check match rules
+				if urlFilename != "" {
+					for j := range loc.MatchRules {
+						rule := &loc.MatchRules[j]
+						if rule.Matches(urlFilename) {
+							matchRule = rule
+							break
+						}
+					}
+				}
+			}
+			break
+		}
+	}
 	
 	var effectiveDirectoryIndex string
 	var handler string
