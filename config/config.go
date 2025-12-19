@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -48,6 +49,8 @@ type MimeType struct {
 }
 
 type Config struct {
+	Include               interface{}   `json:"include"`               // Single file path (string) or array of file paths ([]string)
+	Includes              interface{}   `json:"includes"`              // Alternative field name for multiple includes (array of file paths)
 	User                  string        `json:"user"`
 	Group                 string        `json:"group"`
 	ServerAdmin           string        `json:"serverAdmin"`
@@ -65,8 +68,32 @@ type Config struct {
 	AdminIPWhitelist       []string      `json:"adminIPWhitelist"`       // IP whitelist for admin access (empty = allow all)
 }
 
+// Load loads configuration from a file, handling includes recursively
 func Load(configFilePath string) (*Config, error) {
-	configFile, err := os.Open(configFilePath)
+	return loadWithDepth(configFilePath, 0, make(map[string]bool))
+}
+
+// loadWithDepth loads config with include depth tracking to prevent circular includes
+func loadWithDepth(configFilePath string, depth int, loaded map[string]bool) (*Config, error) {
+	// Prevent infinite recursion (max depth: 10)
+	if depth > 10 {
+		return nil, fmt.Errorf("maximum include depth exceeded (circular include?)")
+	}
+
+	// Resolve absolute path
+	absPath, err := filepath.Abs(configFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("error resolving config path: %w", err)
+	}
+
+	// Check for circular includes
+	if loaded[absPath] {
+		return nil, fmt.Errorf("circular include detected: %s", absPath)
+	}
+	loaded[absPath] = true
+
+	// Open and parse config file
+	configFile, err := os.Open(absPath)
 	if err != nil {
 		return nil, fmt.Errorf("error opening FastHTTP JSON file: %w", err)
 	}
@@ -78,6 +105,44 @@ func Load(configFilePath string) (*Config, error) {
 		return nil, fmt.Errorf("error parsing FastHTTP JSON configuration: %w", err)
 	}
 
+	// Get base directory for resolving relative include paths
+	baseDir := filepath.Dir(absPath)
+
+	// Process includes - support both "include" and "includes" fields
+	var includeFiles []string
+
+	// Handle "include" field (single or multiple)
+	if config.Include != nil {
+		files := parseIncludeField(config.Include)
+		includeFiles = append(includeFiles, files...)
+	}
+
+	// Handle "includes" field (always multiple)
+	if config.Includes != nil {
+		files := parseIncludeField(config.Includes)
+		includeFiles = append(includeFiles, files...)
+	}
+
+	// Load and merge each included file
+	for _, includeFile := range includeFiles {
+		// Resolve relative paths relative to the current config file
+		var includePath string
+		if filepath.IsAbs(includeFile) {
+			includePath = includeFile
+		} else {
+			includePath = filepath.Join(baseDir, includeFile)
+		}
+
+		// Load included config
+		includedConfig, err := loadWithDepth(includePath, depth+1, loaded)
+		if err != nil {
+			return nil, fmt.Errorf("error loading included config %s: %w", includeFile, err)
+		}
+
+		// Merge included config into current config
+		mergeConfig(&config, includedConfig)
+	}
+
 	// Compile regex patterns for all locations
 	for i := range config.VirtualHosts {
 		if err := config.VirtualHosts[i].CompileLocationRegexes(); err != nil {
@@ -86,6 +151,110 @@ func Load(configFilePath string) (*Config, error) {
 	}
 
 	return &config, nil
+}
+
+// parseIncludeField parses the include field which can be a string or array
+func parseIncludeField(include interface{}) []string {
+	var includeFiles []string
+
+	// Handle both string and []string formats
+	switch v := include.(type) {
+	case string:
+		includeFiles = []string{v}
+	case []interface{}:
+		for _, item := range v {
+			if str, ok := item.(string); ok {
+				includeFiles = append(includeFiles, str)
+			}
+		}
+	case []string:
+		includeFiles = v
+	}
+
+	return includeFiles
+}
+
+// mergeConfig merges an included config into the base config
+// Arrays are appended, other fields override if set in included config
+func mergeConfig(base *Config, included *Config) {
+	// Merge arrays (append)
+	if len(included.VirtualHosts) > 0 {
+		base.VirtualHosts = append(base.VirtualHosts, included.VirtualHosts...)
+	}
+	if len(included.MimeTypes) > 0 {
+		// Merge mime types, avoiding duplicates
+		mimeMap := make(map[string]string)
+		for _, mt := range base.MimeTypes {
+			mimeMap[mt.Ext] = mt.Type
+		}
+		for _, mt := range included.MimeTypes {
+			if _, exists := mimeMap[mt.Ext]; !exists {
+				base.MimeTypes = append(base.MimeTypes, mt)
+			}
+		}
+	}
+	if len(included.Listen) > 0 {
+		// Merge listen ports, avoiding duplicates
+		portMap := make(map[string]bool)
+		for _, p := range base.Listen {
+			portMap[p] = true
+		}
+		for _, p := range included.Listen {
+			if !portMap[p] {
+				base.Listen = append(base.Listen, p)
+			}
+		}
+	}
+	if len(included.AdminIPWhitelist) > 0 {
+		// Merge IP whitelist, avoiding duplicates
+		ipMap := make(map[string]bool)
+		for _, ip := range base.AdminIPWhitelist {
+			ipMap[ip] = true
+		}
+		for _, ip := range included.AdminIPWhitelist {
+			if !ipMap[ip] {
+				base.AdminIPWhitelist = append(base.AdminIPWhitelist, ip)
+			}
+		}
+	}
+
+	// Override scalar fields if set in included config
+	if included.User != "" {
+		base.User = included.User
+	}
+	if included.Group != "" {
+		base.Group = included.Group
+	}
+	if included.ServerAdmin != "" {
+		base.ServerAdmin = included.ServerAdmin
+	}
+	if included.DirectoryIndex != "" {
+		base.DirectoryIndex = included.DirectoryIndex
+	}
+	if included.RateLimitRequests > 0 {
+		base.RateLimitRequests = included.RateLimitRequests
+	}
+	if included.RateLimitWindowSeconds > 0 {
+		base.RateLimitWindowSeconds = included.RateLimitWindowSeconds
+	}
+	if included.AdminPort != "" {
+		base.AdminPort = included.AdminPort
+	}
+	// AdminEnabled and AdminAuthEnabled: only override if explicitly set (not just default false)
+	// This is tricky with JSON, so we'll use a pointer or check if it was in the original
+	// For simplicity, we'll override if the included config has it set
+	if included.AdminEnabled {
+		base.AdminEnabled = included.AdminEnabled
+	}
+	if included.AdminAuthEnabled {
+		base.AdminAuthEnabled = included.AdminAuthEnabled
+	}
+	if included.AdminUsername != "" {
+		base.AdminUsername = included.AdminUsername
+	}
+	if included.AdminPassword != "" {
+		base.AdminPassword = included.AdminPassword
+	}
 }
 
 // GetVirtualHostByServerName finds a virtual host by server name
