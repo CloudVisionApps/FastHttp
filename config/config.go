@@ -22,6 +22,7 @@ type VirtualHost struct {
 	CGIPath         string   `json:"cgiPath"`         // Path prefix for CGI scripts (e.g., "/cgi-bin")
 	ProxyUnixSocket string   `json:"proxyUnixSocket"` // Unix socket path for proxy (e.g., "/var/run/app.sock")
 	ProxyPath       string   `json:"proxyPath"`       // URL path prefix to proxy (e.g., "/api")
+	ProxyType       string   `json:"proxyType"`       // Proxy type: "http" or "fcgi" (default: "http")
 }
 
 type MimeType struct {

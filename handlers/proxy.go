@@ -6,9 +6,14 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"fasthttp/config"
+	"fasthttp/utils"
+
+	"github.com/yookoala/gofast"
 )
 
 // ProxyHandler handles proxying requests to Unix socket backends
@@ -42,7 +47,77 @@ func (h *ProxyHandler) Handle(w http.ResponseWriter, r *http.Request, virtualHos
 		return nil
 	}
 
-	log.Printf("Proxying request to Unix socket: %s", unixSocket)
+	// Determine proxy type (default to http, but check for fcgi)
+	proxyType := strings.ToLower(virtualHost.ProxyType)
+	if proxyType == "" {
+		proxyType = "http"
+	}
+
+	// Handle FastCGI proxy
+	if proxyType == "fcgi" {
+		return h.handleFCGIProxy(w, r, virtualHost, unixSocket)
+	}
+
+	// Handle HTTP proxy (default)
+	return h.handleHTTPProxy(w, r, virtualHost, unixSocket)
+}
+
+// handleFCGIProxy handles FastCGI proxying over Unix socket
+func (h *ProxyHandler) handleFCGIProxy(w http.ResponseWriter, r *http.Request, virtualHost *config.VirtualHost, unixSocket string) error {
+	log.Printf("Proxying FCGI request to Unix socket: %s", unixSocket)
+
+	// Determine the script path
+	scriptPath := r.URL.Path
+	if virtualHost.ProxyPath != "" && strings.HasPrefix(scriptPath, virtualHost.ProxyPath) {
+		// Strip the proxy path prefix
+		scriptPath = strings.TrimPrefix(scriptPath, virtualHost.ProxyPath)
+		if !strings.HasPrefix(scriptPath, "/") {
+			scriptPath = "/" + scriptPath
+		}
+	}
+
+	// If script path is empty or root, try to find a default file
+	if scriptPath == "/" || scriptPath == "" {
+		// Try common index files
+		indexFiles := []string{"index.php", "index.html", "index.htm"}
+		if virtualHost.DirectoryIndex != "" {
+			indexFiles = append([]string{virtualHost.DirectoryIndex}, indexFiles...)
+		}
+
+		for _, indexFile := range indexFiles {
+			fullPath := filepath.Join(virtualHost.DocumentRoot, indexFile)
+			if _, err := os.Stat(fullPath); err == nil {
+				scriptPath = "/" + indexFile
+				break
+			}
+		}
+	}
+
+	// Get the file name from the path
+	fileName := utils.GetFileName(scriptPath)
+	if fileName == "/" || fileName == "" {
+		fileName = "index.php"
+	}
+
+	log.Printf("FCGI proxy script: %s", fileName)
+
+	// Create Unix socket connection factory for FastCGI
+	connFactory := gofast.SimpleConnFactory("unix", unixSocket)
+
+	// Create FastCGI handler
+	gofastHandler := gofast.NewHandler(
+		gofast.NewFileEndpoint(virtualHost.DocumentRoot+"/"+fileName)(gofast.BasicSession),
+		gofast.SimpleClientFactory(connFactory),
+	)
+
+	// Serve the request
+	http.HandlerFunc(gofastHandler.ServeHTTP).ServeHTTP(w, r)
+	return nil
+}
+
+// handleHTTPProxy handles HTTP proxying over Unix socket
+func (h *ProxyHandler) handleHTTPProxy(w http.ResponseWriter, r *http.Request, virtualHost *config.VirtualHost, unixSocket string) error {
+	log.Printf("Proxying HTTP request to Unix socket: %s", unixSocket)
 
 	// Create a custom transport that uses Unix socket
 	transport := &http.Transport{
