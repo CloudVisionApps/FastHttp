@@ -238,6 +238,11 @@ func handleConvert() {
 		fmt.Printf("Error parsing file: %v\n", err)
 		os.Exit(1)
 	}
+	
+	fmt.Printf("Found %d include(s), %d virtual host(s) in main file\n", len(parsed.Includes), len(parsed.VirtualHosts))
+	if len(parsed.Includes) > 0 {
+		fmt.Printf("Processing includes: %v\n", parsed.Includes)
+	}
 
 	// Convert to FastHTTP config
 	converter := parser.NewFastHTTPConverter()

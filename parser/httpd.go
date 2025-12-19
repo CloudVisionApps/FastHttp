@@ -120,6 +120,11 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 		if directive == "Include" || directive == "IncludeOptional" {
 			for _, arg := range args {
 				includePaths := p.expandIncludePath(arg)
+				if len(includePaths) == 0 {
+					fmt.Printf("Warning: No files matched include pattern: %s\n", arg)
+				} else {
+					fmt.Printf("Expanded include pattern '%s' to %d file(s)\n", arg, len(includePaths))
+				}
 				parsed.Includes = append(parsed.Includes, includePaths...)
 			}
 			continue
@@ -171,7 +176,7 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 				// Extract port from VirtualHost directive (e.g., "*:80" or "192.168.1.1:443")
 				port := p.extractPort(args[0])
 				currentVHost = &config.VirtualHost{
-					Listen: []string{},
+					Listen:    []string{},
 					Locations: []config.Location{},
 				}
 				if port != "" {
@@ -180,7 +185,16 @@ func (p *ApacheHttpdParser) parseFile(filePath string, skipIncludes bool) (*Pars
 				inVHost = true
 			}
 		} else if directive == "</VirtualHost>" {
-			if currentVHost != nil && currentVHost.ServerName != "" {
+			if currentVHost != nil {
+				// Add virtual host even if ServerName is empty (it might be set later or be a default vhost)
+				if currentVHost.ServerName == "" {
+					// Try to use DocumentRoot as identifier if no ServerName
+					if currentVHost.DocumentRoot != "" {
+						currentVHost.ServerName = filepath.Base(currentVHost.DocumentRoot)
+					} else {
+						currentVHost.ServerName = "_default_"
+					}
+				}
 				parsed.VirtualHosts = append(parsed.VirtualHosts, *currentVHost)
 			}
 			currentVHost = nil
@@ -292,10 +306,14 @@ func (p *ApacheHttpdParser) parseIncludes(includePaths []string, visited map[str
 		if err != nil {
 			// For IncludeOptional, continue on error; for Include, return error
 			// We'll treat all as optional for now to be safe
+			fmt.Printf("Warning: Error parsing included file %s: %v\n", absPath, err)
 			continue
 		}
 
 		// Add virtual hosts from this file
+		if len(includedParsed.VirtualHosts) > 0 {
+			fmt.Printf("Found %d virtual host(s) in %s\n", len(includedParsed.VirtualHosts), absPath)
+		}
 		allVHosts = append(allVHosts, includedParsed.VirtualHosts...)
 
 		// Recursively parse nested includes from this file
@@ -638,9 +656,33 @@ func (p *ApacheHttpdParser) expandIncludePath(pattern string) []string {
 		searchDir = filepath.Dir(pattern)
 		globPattern = filepath.Base(pattern)
 	} else {
+		// For relative paths, try to resolve relative to baseDir
+		// But Apache also supports ServerRoot-relative paths
+		// Try baseDir first, then try as-is if it looks like a directory path
 		fullPath := filepath.Join(p.baseDir, pattern)
 		searchDir = filepath.Dir(fullPath)
 		globPattern = filepath.Base(pattern)
+		
+		// If the resolved directory doesn't exist, try resolving the pattern differently
+		// Apache includes are often relative to ServerRoot, not the config file directory
+		if _, err := os.Stat(searchDir); os.IsNotExist(err) {
+			// Try treating pattern as relative to parent of baseDir (common for vhosts.d)
+			parentDir := filepath.Dir(p.baseDir)
+			altPath := filepath.Join(parentDir, pattern)
+			altSearchDir := filepath.Dir(altPath)
+			if _, err := os.Stat(altSearchDir); err == nil {
+				searchDir = altSearchDir
+				globPattern = filepath.Base(pattern)
+			} else {
+				// Try as absolute path from /etc/httpd (common Apache location)
+				etcHttpdPath := filepath.Join("/etc/httpd", pattern)
+				etcSearchDir := filepath.Dir(etcHttpdPath)
+				if _, err := os.Stat(etcSearchDir); err == nil {
+					searchDir = etcSearchDir
+					globPattern = filepath.Base(pattern)
+				}
+			}
+		}
 	}
 
 	// Find matching files
@@ -648,6 +690,7 @@ func (p *ApacheHttpdParser) expandIncludePath(pattern string) []string {
 	entries, err := os.ReadDir(searchDir)
 	if err != nil {
 		// If directory doesn't exist or can't be read, return empty (IncludeOptional behavior)
+		fmt.Printf("Warning: Cannot read directory %s: %v\n", searchDir, err)
 		return []string{}
 	}
 
