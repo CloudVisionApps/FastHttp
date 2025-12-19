@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 
+	"fasthttp/admin"
 	"fasthttp/config"
 	"fasthttp/handlers"
 	"fasthttp/process"
@@ -53,6 +54,18 @@ func main() {
 }
 
 func startServer(cfg *config.Config) {
+	// Start admin API if enabled
+	if cfg.AdminEnabled {
+		adminPort := cfg.AdminPort
+		if adminPort == "" {
+			adminPort = "8080"
+		}
+		go func() {
+			admin.StartAdminPanel(cfg, "fasthttp.json", adminPort)
+		}()
+		log.Printf("Admin API enabled on port: %s", adminPort)
+	}
+
 	// Initialize rate limiter
 	maxRequests, windowSeconds := cfg.GetRateLimitConfig()
 	rateLimiter := ratelimit.New(maxRequests, windowSeconds)

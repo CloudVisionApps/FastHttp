@@ -58,10 +58,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if virtualHost != nil {
-		log.Printf("Request from %s", r.RemoteAddr)
-		log.Printf("Host: %s", html.EscapeString(r.Host))
+	    log.Printf("Request from %s", r.RemoteAddr)
+        log.Printf("Host: %s", html.EscapeString(r.Host))
 		log.Printf("Port: %s", port)
-		log.Printf("Method: %s", html.EscapeString(r.Method))
+        log.Printf("Method: %s", html.EscapeString(r.Method))
 		log.Printf("URI: %s", r.RequestURI)
 
 		h.router.HandleRequest(w, r, virtualHost)

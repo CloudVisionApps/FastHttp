@@ -57,6 +57,12 @@ type Config struct {
 	DirectoryIndex        string        `json:"directoryIndex"`        // Global default directory index
 	RateLimitRequests     int           `json:"rateLimitRequests"`
 	RateLimitWindowSeconds int          `json:"rateLimitWindowSeconds"`
+	AdminPort             string        `json:"adminPort"`             // Port for admin API (default: "8080")
+	AdminEnabled           bool         `json:"adminEnabled"`          // Enable admin API (default: false)
+	AdminAuthEnabled       bool         `json:"adminAuthEnabled"`        // Enable admin authentication (default: true)
+	AdminUsername          string        `json:"adminUsername"`          // Admin username (default: "admin")
+	AdminPassword          string        `json:"adminPassword"`          // Admin password (MUST be changed!)
+	AdminIPWhitelist       []string      `json:"adminIPWhitelist"`       // IP whitelist for admin access (empty = allow all)
 }
 
 func Load(configFilePath string) (*Config, error) {
