@@ -2,7 +2,7 @@ package admin
 
 import (
 	"crypto/subtle"
-	"os"
+	"encoding/base64"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -46,14 +46,36 @@ func BasicAuthMiddleware(config AuthConfig) fiber.Handler {
 			}
 		}
 
-		// Check for Basic Auth
-		username, password, ok := c.BasicAuth()
-		if !ok {
+		// Parse Basic Auth header manually
+		authHeader := c.Get("Authorization")
+		if authHeader == "" || !strings.HasPrefix(authHeader, "Basic ") {
 			c.Set("WWW-Authenticate", `Basic realm="FastHTTP Admin"`)
 			return c.Status(401).JSON(fiber.Map{
 				"error": "Unauthorized",
 			})
 		}
+
+		// Decode Base64 credentials
+		encoded := strings.TrimPrefix(authHeader, "Basic ")
+		decoded, err := base64.StdEncoding.DecodeString(encoded)
+		if err != nil {
+			c.Set("WWW-Authenticate", `Basic realm="FastHTTP Admin"`)
+			return c.Status(401).JSON(fiber.Map{
+				"error": "Unauthorized",
+			})
+		}
+
+		// Split username:password
+		credentials := strings.SplitN(string(decoded), ":", 2)
+		if len(credentials) != 2 {
+			c.Set("WWW-Authenticate", `Basic realm="FastHTTP Admin"`)
+			return c.Status(401).JSON(fiber.Map{
+				"error": "Unauthorized",
+			})
+		}
+
+		username := credentials[0]
+		password := credentials[1]
 
 		// Use constant-time comparison to prevent timing attacks
 		usernameMatch := subtle.ConstantTimeCompare([]byte(username), []byte(config.Username)) == 1

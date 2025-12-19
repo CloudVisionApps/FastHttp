@@ -50,11 +50,13 @@ The admin API currently runs in the **same process** as the web server. This has
    }
    ```
 
-3. **Use Environment Variables** (More secure)
-   ```bash
-   export ADMIN_USERNAME="admin"
-   export ADMIN_PASSWORD="secure-password"
-   export ADMIN_TOKEN="jwt-token-here"
+3. **Configuration File** (Current implementation)
+   ```json
+   {
+     "adminAuthEnabled": true,
+     "adminUsername": "admin",
+     "adminPassword": "secure-password"
+   }
    ```
 
 4. **Consider Separate Process** (For high-security environments)
@@ -99,9 +101,8 @@ Internet -> Nginx (SSL + Auth) -> Admin API (localhost only)
 ## Current Implementation
 
 ✅ Basic Authentication (HTTP Basic Auth)
-✅ Bearer Token support
 ✅ IP Whitelist support
-✅ Environment variable support
+✅ Configuration file based (no environment variables)
 ⚠️ Still in same process (acceptable for small deployments)
 
 ## Migration Path
@@ -114,10 +115,10 @@ If you need better security:
 
 ## Security Checklist
 
-- [ ] Change default admin password
+- [ ] Change default admin password in config file
 - [ ] Enable authentication (`adminAuthEnabled: true`)
 - [ ] Set up IP whitelist if possible
-- [ ] Use environment variables for credentials
+- [ ] Secure config file permissions (chmod 600)
 - [ ] Consider binding to localhost only
 - [ ] Use HTTPS in production
 - [ ] Implement rate limiting
