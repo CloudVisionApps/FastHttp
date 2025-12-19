@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -89,7 +88,7 @@ func (h *ProxyHandler) Handle(w http.ResponseWriter, r *http.Request, virtualHos
 
 // handleFCGIProxy handles FastCGI proxying over Unix socket
 func (h *ProxyHandler) handleFCGIProxy(w http.ResponseWriter, r *http.Request, virtualHost *config.VirtualHost, unixSocket string, effectiveDirectoryIndex string) error {
-	log.Printf("Proxying FCGI request to Unix socket: %s", unixSocket)
+	utils.WebServerLog("Proxying FCGI request to Unix socket: %s", unixSocket)
 
 	// Determine the script path
 	scriptPath := r.URL.Path
@@ -116,7 +115,7 @@ func (h *ProxyHandler) handleFCGIProxy(w http.ResponseWriter, r *http.Request, v
 		fileName = "index.php"
 	}
 
-	log.Printf("FCGI proxy script: %s", fileName)
+	utils.WebServerLog("FCGI proxy script: %s", fileName)
 
 	// Create Unix socket connection factory for FastCGI
 	connFactory := gofast.SimpleConnFactory("unix", unixSocket)
@@ -134,7 +133,7 @@ func (h *ProxyHandler) handleFCGIProxy(w http.ResponseWriter, r *http.Request, v
 
 // handleHTTPProxy handles HTTP proxying over Unix socket
 func (h *ProxyHandler) handleHTTPProxy(w http.ResponseWriter, r *http.Request, virtualHost *config.VirtualHost, unixSocket string) error {
-	log.Printf("Proxying HTTP request to Unix socket: %s", unixSocket)
+	utils.WebServerLog("Proxying HTTP request to Unix socket: %s", unixSocket)
 
 	// Create a custom transport that uses Unix socket
 	transport := &http.Transport{

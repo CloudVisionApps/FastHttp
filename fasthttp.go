@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 
@@ -29,14 +28,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	log.Printf("Configuration loaded successfully from %s", configFilePath)
+	// Initialize loggers
+	if err := utils.InitLoggers(cfg.LogFile, cfg.AdminLogFile, cfg.ErrorLogFile); err != nil {
+		fmt.Printf("Error initializing loggers: %v\n", err)
+		os.Exit(1)
+	}
+
+	utils.WebServerLog("Configuration loaded successfully from %s", configFilePath)
 
 	switch command {
 	case "start":
 		startServer(cfg)
 	case "stop":
 		if err := process.Stop(); err != nil {
-			log.Fatal(err)
+			utils.ErrorLog("Error stopping server: %v", err)
+			os.Exit(1)
 		}
 	case "status":
 		ports := cfg.GetAllListenPorts()
@@ -45,7 +51,8 @@ func main() {
 			portStr = ports[0]
 		}
 		if err := process.Status(portStr); err != nil {
-			log.Fatal(err)
+			utils.ErrorLog("Error getting status: %v", err)
+			os.Exit(1)
 		}
 	default:
 		fmt.Println("Unknown command")
@@ -63,7 +70,7 @@ func startServer(cfg *config.Config) {
 		go func() {
 			admin.StartAdminPanel(cfg, "fasthttp.json", adminPort)
 		}()
-		log.Printf("[Web Server] Admin API enabled on port: %s", adminPort)
+		utils.WebServerLog("[Web Server] Admin API enabled on port: %s", adminPort)
 	}
 
 	// Initialize rate limiter
@@ -94,7 +101,8 @@ func startServer(cfg *config.Config) {
 
 	// Write PID file
 	if err := process.WritePID(); err != nil {
-		log.Fatal(err)
+		utils.ErrorLog("Error writing PID file: %v", err)
+		os.Exit(1)
 	}
 
 	// Start listening on all ports
@@ -104,9 +112,10 @@ func startServer(cfg *config.Config) {
 			Addr:    ":" + listenPorts[0],
 			Handler: rateLimitHandler,
 		}
-		log.Printf("[Web Server] Starting FastHTTP server on port: %s", listenPorts[0])
+		utils.WebServerLog("[Web Server] Starting FastHTTP server on port: %s", listenPorts[0])
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed: %v", err)
+			utils.ErrorLog("Server failed: %v", err)
+			os.Exit(1)
 		}
 	} else {
 		// Multiple ports - start goroutines for each
@@ -116,9 +125,9 @@ func startServer(cfg *config.Config) {
 					Addr:    ":" + p,
 					Handler: rateLimitHandler,
 				}
-				log.Printf("[Web Server] Starting FastHTTP server on port: %s", p)
+				utils.WebServerLog("[Web Server] Starting FastHTTP server on port: %s", p)
 				if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-					log.Fatalf("Server failed on port %s: %v", p, err)
+					utils.ErrorLog("Server failed on port %s: %v", p, err)
 				}
 			}(port)
 		}

@@ -2,12 +2,14 @@ package admin
 
 import (
 	"encoding/json"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"sync"
 
 	"fasthttp/config"
+	"fasthttp/utils"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -31,10 +33,21 @@ func NewAdminAPI(cfg *config.Config, configPath string) *AdminAPI {
 	})
 
 	// Custom logger middleware that matches web server log format
+	// Use admin log file if configured, otherwise stdout
+	var logOutput io.Writer = os.Stdout
+	if cfg.AdminLogFile != "" {
+		dir := filepath.Dir(cfg.AdminLogFile)
+		if err := os.MkdirAll(dir, 0755); err == nil {
+			if file, err := os.OpenFile(cfg.AdminLogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
+				logOutput = file
+			}
+		}
+	}
+
 	app.Use(logger.New(logger.Config{
 		Format:     "[Admin API] ${time} | ${status} | ${latency} | ${ip} | ${method} | ${path}\n",
 		TimeFormat: "2006/01/02 15:04:05",
-		Output:     nil, // Use default output (stdout)
+		Output:     logOutput,
 	}))
 	
 	app.Use(cors.New(cors.Config{
@@ -127,7 +140,7 @@ func (a *AdminAPI) setupRoutes() {
 			MaxAge:        3600,
 			CacheDuration: 0,
 		})
-		log.Printf("[Admin API] Serving admin UI from: %s", adminUIDir)
+		utils.AdminLog("[Admin API] Serving admin UI from: %s", adminUIDir)
 		
 		// Catch-all for React Router (SPA routing)
 		// This must be last to allow API routes to work
@@ -159,7 +172,7 @@ func (a *AdminAPI) setupRoutes() {
 
 // Start starts the admin API server
 func (a *AdminAPI) Start(port string) error {
-	log.Printf("[Admin API] Starting on port %s", port)
+	utils.AdminLog("[Admin API] Starting on port %s", port)
 	return a.app.Listen(":" + port)
 }
 

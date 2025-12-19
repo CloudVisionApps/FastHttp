@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -45,7 +44,7 @@ func (h *PHPHandler) Handle(w http.ResponseWriter, r *http.Request, virtualHost 
 		}
 	}
 
-	log.Printf("Serving PHP file: %s", fileName)
+	utils.WebServerLog("Serving PHP file: %s", fileName)
 
 	connFactory := gofast.SimpleConnFactory("tcp", virtualHost.PHPProxyFCGI)
 

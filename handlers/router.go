@@ -1,10 +1,10 @@
 package handlers
 
 import (
-	"log"
 	"net/http"
 
 	"fasthttp/config"
+	"fasthttp/utils"
 )
 
 // Router selects and executes the appropriate handler for a request
@@ -40,7 +40,7 @@ func (r *Router) HandleRequest(w http.ResponseWriter, req *http.Request, virtual
 		} else {
 			effectiveDirectoryIndex = r.config.GetDirectoryIndex(virtualHost)
 		}
-		log.Printf("Using location: %s (handler: %s)", location.Path, location.Handler)
+		utils.WebServerLog("Using location: %s (handler: %s)", location.Path, location.Handler)
 	} else {
 		effectiveDirectoryIndex = r.config.GetDirectoryIndex(virtualHost)
 	}
@@ -55,10 +55,10 @@ func (r *Router) HandleRequest(w http.ResponseWriter, req *http.Request, virtual
 	// Try each handler in order until one can handle the request
 	for _, handler := range r.handlers {
 		if handler.CanHandle(req, virtualHost) {
-			log.Printf("Using handler: %T", handler)
+			utils.WebServerLog("Using handler: %T", handler)
 			// Pass both virtualHost and effective directoryIndex to handler
 			if err := handler.Handle(w, req, virtualHost, effectiveDirectoryIndex); err != nil {
-				log.Printf("Handler error: %v", err)
+				utils.ErrorLog("Handler error: %v", err)
 				// Don't write error response here - handler should have already handled it
 				// Only write if response hasn't been written yet
 			}
@@ -67,7 +67,7 @@ func (r *Router) HandleRequest(w http.ResponseWriter, req *http.Request, virtual
 	}
 
 	// Fallback: should never reach here as StaticFileHandler always returns true
-	log.Printf("No handler found, using default file server")
+	utils.WebServerLog("No handler found, using default file server")
 	http.FileServer(http.Dir(virtualHost.DocumentRoot)).ServeHTTP(w, req)
 }
 
@@ -82,7 +82,7 @@ func (r *Router) handleLocationRequest(w http.ResponseWriter, req *http.Request,
 		tempVHost.ProxyType = location.ProxyType
 		tempVHost.ProxyPath = location.Path
 		if err := handler.Handle(w, req, &tempVHost, effectiveDirectoryIndex); err != nil {
-			log.Printf("Location proxy handler error: %v", err)
+			utils.ErrorLog("Location proxy handler error: %v", err)
 		}
 	case "cgi":
 		handler := NewCGIHandler()
@@ -93,7 +93,7 @@ func (r *Router) handleLocationRequest(w http.ResponseWriter, req *http.Request,
 			tempVHost.CGIPath = location.Path
 		}
 		if err := handler.Handle(w, req, &tempVHost, effectiveDirectoryIndex); err != nil {
-			log.Printf("Location CGI handler error: %v", err)
+			utils.ErrorLog("Location CGI handler error: %v", err)
 		}
 	case "php":
 		handler := NewPHPHandler()
@@ -101,15 +101,15 @@ func (r *Router) handleLocationRequest(w http.ResponseWriter, req *http.Request,
 		tempVHost := *virtualHost
 		tempVHost.PHPProxyFCGI = location.PHPProxyFCGI
 		if err := handler.Handle(w, req, &tempVHost, effectiveDirectoryIndex); err != nil {
-			log.Printf("Location PHP handler error: %v", err)
+			utils.ErrorLog("Location PHP handler error: %v", err)
 		}
 	case "static":
 		handler := NewStaticFileHandler()
 		if err := handler.Handle(w, req, virtualHost, effectiveDirectoryIndex); err != nil {
-			log.Printf("Location static handler error: %v", err)
+			utils.ErrorLog("Location static handler error: %v", err)
 		}
 	default:
-		log.Printf("Unknown location handler type: %s", location.Handler)
+		utils.ErrorLog("Unknown location handler type: %s", location.Handler)
 		http.Error(w, "Configuration error", http.StatusInternalServerError)
 	}
 }

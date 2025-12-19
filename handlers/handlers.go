@@ -2,11 +2,11 @@ package handlers
 
 import (
 	"html"
-	"log"
 	"net/http"
 	"strings"
 
 	"fasthttp/config"
+	"fasthttp/utils"
 )
 
 // Handler is the main HTTP handler that routes requests to appropriate handlers
@@ -58,11 +58,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if virtualHost != nil {
-	    log.Printf("Request from %s", r.RemoteAddr)
-        log.Printf("Host: %s", html.EscapeString(r.Host))
-		log.Printf("Port: %s", port)
-        log.Printf("Method: %s", html.EscapeString(r.Method))
-		log.Printf("URI: %s", r.RequestURI)
+	    utils.WebServerLog("Request from %s", r.RemoteAddr)
+        utils.WebServerLog("Host: %s", html.EscapeString(r.Host))
+		utils.WebServerLog("Port: %s", port)
+        utils.WebServerLog("Method: %s", html.EscapeString(r.Method))
+		utils.WebServerLog("URI: %s", r.RequestURI)
 
 		h.router.HandleRequest(w, r, virtualHost)
 	} else {

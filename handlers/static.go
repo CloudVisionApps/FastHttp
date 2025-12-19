@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"html"
 	"html/template"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -174,7 +173,7 @@ func (h *StaticFileHandler) handleDirectoryListing(w http.ResponseWriter, r *htt
 	tmpl, err := template.ParseFiles(templatePath)
 	if err != nil {
 		// If template not found, fall back to default directory listing
-		log.Printf("Template not found, using default listing: %v", err)
+		utils.ErrorLog("Template not found, using default listing: %v", err)
 		http.FileServer(http.Dir(virtualHost.DocumentRoot)).ServeHTTP(w, r)
 		return
 	}
@@ -187,7 +186,7 @@ func (h *StaticFileHandler) handleDirectoryListing(w http.ResponseWriter, r *htt
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("Error executing template: %v", err)
+		utils.ErrorLog("Error executing template: %v", err)
 		http.Error(w, "Error generating directory listing", http.StatusInternalServerError)
 		return
 	}

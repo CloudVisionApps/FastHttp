@@ -67,6 +67,9 @@ type Config struct {
 	AdminUsername          string        `json:"adminUsername"`          // Admin username (default: "admin")
 	AdminPassword          string        `json:"adminPassword"`          // Admin password (MUST be changed!)
 	AdminIPWhitelist       []string      `json:"adminIPWhitelist"`       // IP whitelist for admin access (empty = allow all)
+	LogFile                string        `json:"logFile"`                // Log file path for web server (empty = stdout)
+	AdminLogFile           string        `json:"adminLogFile"`           // Log file path for admin API (empty = stdout)
+	ErrorLogFile           string        `json:"errorLogFile"`           // Error log file path (empty = stderr)
 }
 
 // Load loads configuration from a file, handling includes recursively

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -12,6 +11,7 @@ import (
 	"syscall"
 
 	"fasthttp/config"
+	"fasthttp/utils"
 )
 
 // CGIHandler handles CGI program execution
@@ -71,7 +71,7 @@ func (h *CGIHandler) Handle(w http.ResponseWriter, r *http.Request, virtualHost 
 		return nil
 	}
 	if err != nil {
-		log.Printf("Error statting file: %v", err)
+		utils.ErrorLog("Error statting file: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return err
 	}
@@ -82,7 +82,7 @@ func (h *CGIHandler) Handle(w http.ResponseWriter, r *http.Request, virtualHost 
 		return nil
 	}
 
-	log.Printf("Executing CGI: %s", fullPath)
+	utils.WebServerLog("Executing CGI: %s", fullPath)
 
 	// Set up environment variables for CGI
 	env := os.Environ()
@@ -128,13 +128,13 @@ func (h *CGIHandler) Handle(w http.ResponseWriter, r *http.Request, virtualHost 
 		if virtualHost.User != "" {
 			u, err := user.Lookup(virtualHost.User)
 			if err != nil {
-				log.Printf("Error looking up user %s: %v", virtualHost.User, err)
+				utils.ErrorLog("Error looking up user %s: %v", virtualHost.User, err)
 				http.Error(w, "CGI configuration error", http.StatusInternalServerError)
 				return err
 			}
 			uidInt, err := strconv.Atoi(u.Uid)
 			if err != nil {
-				log.Printf("Error converting UID: %v", err)
+				utils.ErrorLog("Error converting UID: %v", err)
 				http.Error(w, "CGI configuration error", http.StatusInternalServerError)
 				return err
 			}
@@ -147,13 +147,13 @@ func (h *CGIHandler) Handle(w http.ResponseWriter, r *http.Request, virtualHost 
 		if virtualHost.Group != "" {
 			g, err := user.LookupGroup(virtualHost.Group)
 			if err != nil {
-				log.Printf("Error looking up group %s: %v", virtualHost.Group, err)
+				utils.ErrorLog("Error looking up group %s: %v", virtualHost.Group, err)
 				http.Error(w, "CGI configuration error", http.StatusInternalServerError)
 				return err
 			}
 			gidInt, err := strconv.Atoi(g.Gid)
 			if err != nil {
-				log.Printf("Error converting GID: %v", err)
+				utils.ErrorLog("Error converting GID: %v", err)
 				http.Error(w, "CGI configuration error", http.StatusInternalServerError)
 				return err
 			}
@@ -174,7 +174,7 @@ func (h *CGIHandler) Handle(w http.ResponseWriter, r *http.Request, virtualHost 
 	// Capture stdout and stderr
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		log.Printf("CGI execution error: %v", err)
+		utils.ErrorLog("CGI execution error: %v", err)
 		http.Error(w, "CGI execution failed", http.StatusInternalServerError)
 		return err
 	}
