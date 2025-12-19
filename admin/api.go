@@ -27,10 +27,16 @@ func NewAdminAPI(cfg *config.Config, configPath string) *AdminAPI {
 	app := fiber.New(fiber.Config{
 		JSONEncoder: json.Marshal,
 		JSONDecoder: json.Unmarshal,
+		DisableStartupMessage: true, // Disable Fiber banner
 	})
 
-	// Middleware
-	app.Use(logger.New())
+	// Custom logger middleware that matches web server log format
+	app.Use(logger.New(logger.Config{
+		Format:     "[Admin API] ${time} | ${status} | ${latency} | ${ip} | ${method} | ${path}\n",
+		TimeFormat: "2006/01/02 15:04:05",
+		Output:     nil, // Use default output (stdout)
+	}))
+	
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     "*",
 		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS,HEAD",
@@ -121,7 +127,7 @@ func (a *AdminAPI) setupRoutes() {
 			MaxAge:        3600,
 			CacheDuration: 0,
 		})
-		log.Printf("Serving admin UI from: %s", adminUIDir)
+		log.Printf("[Admin API] Serving admin UI from: %s", adminUIDir)
 		
 		// Catch-all for React Router (SPA routing)
 		// This must be last to allow API routes to work
@@ -147,13 +153,13 @@ func (a *AdminAPI) setupRoutes() {
 			}
 			return a.serveAdminInfo(c)
 		})
-		log.Printf("Admin UI not found at %s, serving info page", adminUIDir)
+		log.Printf("[Admin API] Admin UI not found at %s, serving info page", adminUIDir)
 	}
 }
 
 // Start starts the admin API server
 func (a *AdminAPI) Start(port string) error {
-	log.Printf("Starting admin API on port %s", port)
+	log.Printf("[Admin API] Starting on port %s", port)
 	return a.app.Listen(":" + port)
 }
 

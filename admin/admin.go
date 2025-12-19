@@ -21,11 +21,11 @@ func StartAdminPanel(cfg *config.Config, configPath, adminPort string) {
 
 	go func() {
 		<-c
-		log.Println("Shutting down admin API...")
+		log.Println("[Admin API] Shutting down...")
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := api.Shutdown(); err != nil {
-			log.Printf("Error shutting down admin API: %v", err)
+			log.Printf("[Admin API] Error shutting down: %v", err)
 		}
 		<-ctx.Done()
 		os.Exit(0)
@@ -33,6 +33,6 @@ func StartAdminPanel(cfg *config.Config, configPath, adminPort string) {
 
 	// Start server
 	if err := api.Start(adminPort); err != nil {
-		log.Fatalf("Admin API failed: %v", err)
+		log.Fatalf("[Admin API] Failed to start: %v", err)
 	}
 }
