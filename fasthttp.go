@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"os"
+	"strconv"
 
 	"fasthttp/admin"
 	"fasthttp/config"
@@ -99,26 +101,71 @@ func startServer(cfg *config.Config) {
 		listenPorts = []string{"80"}
 	}
 
-	// Write PID file
+	// Write PID file (before switching user, in case we need root permissions)
 	if err := process.WritePID(); err != nil {
 		utils.ErrorLog("Error writing PID file: %v", err)
 		os.Exit(1)
 	}
 
 	// Start listening on all ports
+	// Note: For privileged ports (< 1024), we need root to bind
+	// After binding, we'll drop privileges to the configured user/group
 	if len(listenPorts) == 1 {
-		// Single port - simple case
+		// Single port - bind and drop privileges if needed
 		server := &http.Server{
 			Addr:    ":" + listenPorts[0],
 			Handler: rateLimitHandler,
 		}
-		utils.WebServerLog("[Web Server] Starting FastHTTP server on port: %s", listenPorts[0])
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			utils.ErrorLog("Server failed: %v", err)
-			os.Exit(1)
+		
+		port, _ := strconv.Atoi(listenPorts[0])
+		isPrivileged := port < 1024
+		
+		if isPrivileged && (cfg.User != "" || cfg.Group != "") && os.Geteuid() == 0 {
+			// Create listener manually, then drop privileges
+			listener, err := net.Listen("tcp", ":"+listenPorts[0])
+			if err != nil {
+				utils.ErrorLog("Error creating listener: %v", err)
+				os.Exit(1)
+			}
+			
+			// Drop privileges after binding
+			if err := utils.SwitchUserGroup(cfg.User, cfg.Group); err != nil {
+				utils.ErrorLog("Error dropping privileges: %v", err)
+				listener.Close()
+				os.Exit(1)
+			}
+			
+			currentUser, currentGroup, _ := utils.GetCurrentUser()
+			utils.WebServerLog("[Web Server] Dropped privileges, running as user: %s, group: %s", currentUser, currentGroup)
+			utils.WebServerLog("[Web Server] Starting FastHTTP server on port: %s", listenPorts[0])
+			
+			if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
+				utils.ErrorLog("Server failed: %v", err)
+				os.Exit(1)
+			}
+		} else {
+			// Normal binding (non-privileged or no user switching)
+			utils.WebServerLog("[Web Server] Starting FastHTTP server on port: %s", listenPorts[0])
+			if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				utils.ErrorLog("Server failed: %v", err)
+				os.Exit(1)
+			}
 		}
 	} else {
 		// Multiple ports - start goroutines for each
+		// For multiple ports, we'll switch user/group before starting (simpler)
+		// Note: This means you need to start as root if any port < 1024
+		if cfg.User != "" || cfg.Group != "" {
+			// Try to switch before binding (will only work if not binding to privileged ports)
+			if err := utils.SwitchUserGroup(cfg.User, cfg.Group); err != nil {
+				utils.ErrorLog("Warning: Could not switch to user/group before binding: %v", err)
+				utils.ErrorLog("If binding to privileged ports (< 1024), start as root")
+			} else {
+				currentUser, currentGroup, _ := utils.GetCurrentUser()
+				utils.WebServerLog("[Web Server] Running as user: %s, group: %s", currentUser, currentGroup)
+			}
+		}
+		
 		for _, port := range listenPorts {
 			go func(p string) {
 				server := &http.Server{
