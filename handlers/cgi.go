@@ -5,8 +5,11 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 
 	"fasthttp/config"
 )
@@ -27,6 +30,11 @@ func (h *CGIHandler) CanHandle(r *http.Request, virtualHost *config.VirtualHost)
 	// Check if the file exists
 	info, err := os.Stat(fullPath)
 	if err != nil {
+		return false
+	}
+
+	// Skip directories - CGI can only execute files
+	if info.IsDir() {
 		return false
 	}
 
@@ -56,8 +64,20 @@ func (h *CGIHandler) Handle(w http.ResponseWriter, r *http.Request, virtualHost 
 	urlPath := r.URL.Path
 	fullPath := filepath.Join(virtualHost.DocumentRoot, filepath.Clean(urlPath))
 
-	// Check if file exists
-	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+	// Check if file exists and is not a directory
+	info, err := os.Stat(fullPath)
+	if os.IsNotExist(err) {
+		http.NotFound(w, r)
+		return nil
+	}
+	if err != nil {
+		log.Printf("Error statting file: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return err
+	}
+
+	// Skip directories
+	if info.IsDir() {
 		http.NotFound(w, r)
 		return nil
 	}
@@ -95,6 +115,61 @@ func (h *CGIHandler) Handle(w http.ResponseWriter, r *http.Request, virtualHost 
 
 	// Set up stdin from request body
 	cmd.Stdin = r.Body
+
+	// Set user and group if configured
+	if virtualHost.User != "" || virtualHost.Group != "" {
+		var uid, gid uint32
+
+		// Get current UID/GID as defaults
+		currentUID := uint32(os.Getuid())
+		currentGID := uint32(os.Getgid())
+
+		// Look up user
+		if virtualHost.User != "" {
+			u, err := user.Lookup(virtualHost.User)
+			if err != nil {
+				log.Printf("Error looking up user %s: %v", virtualHost.User, err)
+				http.Error(w, "CGI configuration error", http.StatusInternalServerError)
+				return err
+			}
+			uidInt, err := strconv.Atoi(u.Uid)
+			if err != nil {
+				log.Printf("Error converting UID: %v", err)
+				http.Error(w, "CGI configuration error", http.StatusInternalServerError)
+				return err
+			}
+			uid = uint32(uidInt)
+		} else {
+			uid = currentUID
+		}
+
+		// Look up group
+		if virtualHost.Group != "" {
+			g, err := user.LookupGroup(virtualHost.Group)
+			if err != nil {
+				log.Printf("Error looking up group %s: %v", virtualHost.Group, err)
+				http.Error(w, "CGI configuration error", http.StatusInternalServerError)
+				return err
+			}
+			gidInt, err := strconv.Atoi(g.Gid)
+			if err != nil {
+				log.Printf("Error converting GID: %v", err)
+				http.Error(w, "CGI configuration error", http.StatusInternalServerError)
+				return err
+			}
+			gid = uint32(gidInt)
+		} else {
+			gid = currentGID
+		}
+
+		// Set credentials using syscall
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			Credential: &syscall.Credential{
+				Uid: uid,
+				Gid: gid,
+			},
+		}
+	}
 
 	// Capture stdout and stderr
 	output, err := cmd.CombinedOutput()

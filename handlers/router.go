@@ -32,7 +32,8 @@ func (r *Router) HandleRequest(w http.ResponseWriter, req *http.Request, virtual
 			log.Printf("Using handler: %T", handler)
 			if err := handler.Handle(w, req, virtualHost); err != nil {
 				log.Printf("Handler error: %v", err)
-				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				// Don't write error response here - handler should have already handled it
+				// Only write if response hasn't been written yet
 			}
 			return
 		}

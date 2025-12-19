@@ -2,3 +2,18 @@
 
 
 sudo lsof -i:80 -t | xargs -r sudo kill
+
+
+
+
+
+{
+  "cgiPath": "/cgi-bin",
+  "documentRoot": "/var/www/html"
+}
+
+
+{
+  "proxyUnixSocket": "/var/run/app.sock",
+  "proxyPath": "/api"
+}
