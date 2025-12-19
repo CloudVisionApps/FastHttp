@@ -719,28 +719,38 @@ func (p *ApacheHttpdParser) parseVirtualHostDirective(vhost *config.VirtualHost,
 			// Check if already in array to avoid duplicates
 			found := false
 			for _, existing := range vhost.ErrorLog {
-				if existing == resolvedPath {
+				if existing.Path == resolvedPath {
 					found = true
 					break
 				}
 			}
 			if !found {
-				vhost.ErrorLog = append(vhost.ErrorLog, resolvedPath)
+				vhost.ErrorLog = append(vhost.ErrorLog, config.LogEntry{
+					Path:   resolvedPath,
+					Format: "", // ErrorLog doesn't have a format
+				})
 			}
 		}
 	case "customlog":
 		if len(args) > 0 {
 			resolvedPath := p.resolvePath(args[0])
-			// Check if already in array to avoid duplicates
+			format := ""
+			if len(args) > 1 {
+				format = args[1]
+			}
+			// Check if already in array to avoid duplicates (by path + format)
 			found := false
 			for _, existing := range vhost.CustomLog {
-				if existing == resolvedPath {
+				if existing.Path == resolvedPath && existing.Format == format {
 					found = true
 					break
 				}
 			}
 			if !found {
-				vhost.CustomLog = append(vhost.CustomLog, resolvedPath)
+				vhost.CustomLog = append(vhost.CustomLog, config.LogEntry{
+					Path:   resolvedPath,
+					Format: format,
+				})
 			}
 		}
 	case "directoryindex":

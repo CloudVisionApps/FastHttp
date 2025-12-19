@@ -36,11 +36,33 @@ func (n *ConfigNode) AddChild(child *ConfigNode) {
 }
 
 // AddDirective adds a simple directive to this node
+// For directives that can appear multiple times (CustomLog, ErrorLog), appends instead of replacing
 func (n *ConfigNode) AddDirective(name string, values []string) {
 	if n.Directives == nil {
 		n.Directives = make(map[string][]string)
 	}
-	n.Directives[name] = values
+	
+	// Directives that can appear multiple times should be appended
+	multiValueDirectives := map[string]bool{
+		"CustomLog": true,
+		"ErrorLog":  true,
+		"ServerAlias": true,
+	}
+	
+	if multiValueDirectives[name] {
+		// Append values, joining them with a special separator to preserve the argument structure
+		// For CustomLog "/path format", we store as "/path|format" so we can parse it back
+		existing := n.Directives[name]
+		if len(values) > 0 {
+			// Join args with | separator to preserve structure
+			combined := strings.Join(values, "|")
+			existing = append(existing, combined)
+		}
+		n.Directives[name] = existing
+	} else {
+		// Replace for single-value directives
+		n.Directives[name] = values
+	}
 }
 
 // GetDirective gets a directive value (returns first value if multiple)
@@ -183,8 +205,8 @@ func (n *ConfigNode) ConvertToParsedConfig() *ParsedConfig {
 func (n *ConfigNode) convertToVirtualHost() *config.VirtualHost {
 	vhost := &config.VirtualHost{
 		Locations: []config.Location{},
-		ErrorLog:  []string{},
-		CustomLog: []string{},
+		ErrorLog:  []config.LogEntry{},
+		CustomLog: []config.LogEntry{},
 	}
 
 	// Extract listen ports from VirtualHost arguments (e.g., <VirtualHost *:80>)
@@ -264,25 +286,50 @@ func (n *ConfigNode) convertToVirtualHost() *config.VirtualHost {
 	vhost.ServerAdmin = n.GetDirective("ServerAdmin")
 	
 	// Extract log directives from IfModule blocks (can have multiple)
-	errorLogs := n.GetDirectiveAll("ErrorLog")
-	errorLogs = append(errorLogs, n.getDirectiveAllFromChildren("ErrorLog")...)
-	// Remove duplicates and empty values
+	// ErrorLog format: "ErrorLog /path/to/log"
+	errorLogDirectives := n.GetDirectiveAll("ErrorLog")
+	errorLogDirectives = append(errorLogDirectives, n.getDirectiveAllFromChildren("ErrorLog")...)
 	errorLogMap := make(map[string]bool)
-	for _, log := range errorLogs {
-		if log != "" && !errorLogMap[log] {
-			vhost.ErrorLog = append(vhost.ErrorLog, log)
-			errorLogMap[log] = true
+	for _, logPath := range errorLogDirectives {
+		logPath = strings.Trim(logPath, "\"'")
+		if logPath != "" && !errorLogMap[logPath] {
+			vhost.ErrorLog = append(vhost.ErrorLog, config.LogEntry{
+				Path:   logPath,
+				Format: "", // ErrorLog doesn't have a format
+			})
+			errorLogMap[logPath] = true
 		}
 	}
 	
-	customLogs := n.GetDirectiveAll("CustomLog")
-	customLogs = append(customLogs, n.getDirectiveAllFromChildren("CustomLog")...)
-	// Remove duplicates and empty values
+	// CustomLog format: "CustomLog /path/to/log format" or "CustomLog /path/to/log"
+	// Values are stored as "path|format" (or just "path" if no format)
+	customLogDirectives := n.GetDirectiveAll("CustomLog")
+	customLogDirectives = append(customLogDirectives, n.getDirectiveAllFromChildren("CustomLog")...)
 	customLogMap := make(map[string]bool)
-	for _, log := range customLogs {
-		if log != "" && !customLogMap[log] {
-			vhost.CustomLog = append(vhost.CustomLog, log)
-			customLogMap[log] = true
+	for _, customLogValue := range customLogDirectives {
+		// Parse the stored value: "path|format" or just "path"
+		parts := strings.Split(customLogValue, "|")
+		if len(parts) == 0 {
+			continue
+		}
+		
+		logPath := strings.Trim(parts[0], "\"'")
+		if logPath == "" {
+			continue
+		}
+		
+		format := ""
+		if len(parts) > 1 {
+			format = strings.Trim(parts[1], "\"'")
+		}
+		
+		key := logPath + "|" + format
+		if !customLogMap[key] {
+			vhost.CustomLog = append(vhost.CustomLog, config.LogEntry{
+				Path:   logPath,
+				Format: format,
+			})
+			customLogMap[key] = true
 		}
 	}
 	vhost.DirectoryIndex = n.GetDirective("DirectoryIndex")

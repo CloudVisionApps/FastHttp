@@ -10,6 +10,12 @@ import (
 	"strings"
 )
 
+// LogEntry represents a log file entry with optional format
+type LogEntry struct {
+	Path   string `json:"path"`   // Log file path
+	Format string `json:"format"` // Log format name (e.g., "combined", "common") - optional
+}
+
 // Location represents a location/directory block within a virtual host
 type Location struct {
 	Path            string `json:"path"`            // Path prefix to match (e.g., "/api", "/cgi-bin") OR regex pattern if matchType is "regex"
@@ -33,8 +39,8 @@ type VirtualHost struct {
 	User            string     `json:"user"`
 	Group           string     `json:"group"`
 	ServerAdmin     string     `json:"serverAdmin"`
-	ErrorLog        []string   `json:"errorLog"`       // Array of error log paths (can have multiple)
-	CustomLog       []string   `json:"customLog"`      // Array of custom log paths (can have multiple)
+	ErrorLog        []LogEntry `json:"errorLog"`       // Array of error log entries (can have multiple)
+	CustomLog       []LogEntry `json:"customLog"`      // Array of custom log entries with formats (can have multiple)
 	DirectoryIndex  string     `json:"directoryIndex"`
 	PHPProxyFCGI    string     `json:"phpProxyFCGI"`
 	CGIPath         string     `json:"cgiPath"`         // Path prefix for CGI scripts (e.g., "/cgi-bin")
