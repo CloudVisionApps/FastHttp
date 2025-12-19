@@ -63,7 +63,7 @@ func startServer(cfg *config.Config) {
 		go func() {
 			admin.StartAdminPanel(cfg, "fasthttp.json", adminPort)
 		}()
-		log.Printf("Admin API enabled on port: %s", adminPort)
+		log.Printf("[Web Server] Admin API enabled on port: %s", adminPort)
 	}
 
 	// Initialize rate limiter
@@ -104,7 +104,7 @@ func startServer(cfg *config.Config) {
 			Addr:    ":" + listenPorts[0],
 			Handler: rateLimitHandler,
 		}
-		log.Printf("Starting FastHTTP server on port: %s", listenPorts[0])
+		log.Printf("[Web Server] Starting FastHTTP server on port: %s", listenPorts[0])
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed: %v", err)
 		}
@@ -116,7 +116,7 @@ func startServer(cfg *config.Config) {
 					Addr:    ":" + p,
 					Handler: rateLimitHandler,
 				}
-				log.Printf("Starting FastHTTP server on port: %s", p)
+				log.Printf("[Web Server] Starting FastHTTP server on port: %s", p)
 				if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 					log.Fatalf("Server failed on port %s: %v", p, err)
 				}
