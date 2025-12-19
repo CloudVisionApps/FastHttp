@@ -1,23 +1,26 @@
 package main
 
 import (
-// 	"context"
+	// 	"context"
+	"encoding/json"
 	"fmt"
-    "encoding/json"
 	"html"
 	"log"
-	"path"
 	"net/http"
 	"net/url"
-// 	"io/ioutil"
+	"path"
+	"sync"
+	"time"
+
+	// 	"io/ioutil"
+	"os"
 	"regexp"
 	"strconv"
-	"os"
 	"strings"
-// 	"time"
-	"github.com/yookoala/gofast"
 	"syscall"
+
 	"github.com/fatih/color"
+	"github.com/yookoala/gofast"
 )
 
 type FastHTTPVirtualHost struct {
@@ -48,6 +51,8 @@ type FastHTTPConfig struct {
 	HttpPort string `json:"httpPort"`
 	HttpsPort string `json:"httpsPort"`
 	MimeTypes []FastHTTPMimeType `json:"mimeTypes"`
+	RateLimitRequests int `json:"rateLimitRequests"`
+	RateLimitWindowSeconds int `json:"rateLimitWindowSeconds"`
 }
 
 func GetFileName(uri string) string {
@@ -73,6 +78,105 @@ func isFileRequest(uri string) (bool, error) {
 	return ext != "", nil
 }
 
+type RateLimiter struct {
+	requests map[string][]time.Time
+	mu       sync.RWMutex
+	maxRequests int
+	window      time.Duration
+}
+
+func NewRateLimiter(maxRequests int, windowSeconds int) *RateLimiter {
+	rl := &RateLimiter{
+		requests: make(map[string][]time.Time),
+		maxRequests: maxRequests,
+		window: time.Duration(windowSeconds) * time.Second,
+	}
+	
+	// Cleanup old entries periodically
+	go rl.cleanup()
+	
+	return rl
+}
+
+func (rl *RateLimiter) cleanup() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	
+	for range ticker.C {
+		rl.mu.Lock()
+		now := time.Now()
+		for ip, timestamps := range rl.requests {
+			validTimestamps := []time.Time{}
+			for _, ts := range timestamps {
+				if now.Sub(ts) < rl.window {
+					validTimestamps = append(validTimestamps, ts)
+				}
+			}
+			if len(validTimestamps) == 0 {
+				delete(rl.requests, ip)
+			} else {
+				rl.requests[ip] = validTimestamps
+			}
+		}
+		rl.mu.Unlock()
+	}
+}
+
+func (rl *RateLimiter) Allow(ip string) bool {
+	if rl.maxRequests <= 0 {
+		return true // Rate limiting disabled
+	}
+	
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	
+	now := time.Now()
+	
+	// Clean old timestamps for this IP
+	timestamps := rl.requests[ip]
+	validTimestamps := []time.Time{}
+	for _, ts := range timestamps {
+		if now.Sub(ts) < rl.window {
+			validTimestamps = append(validTimestamps, ts)
+		}
+	}
+	
+	// Check if limit exceeded
+	if len(validTimestamps) >= rl.maxRequests {
+		return false
+	}
+	
+	// Add current request
+	validTimestamps = append(validTimestamps, now)
+	rl.requests[ip] = validTimestamps
+	
+	return true
+}
+
+func getClientIP(r *http.Request) string {
+	// Check X-Forwarded-For header first (for proxies)
+	forwarded := r.Header.Get("X-Forwarded-For")
+	if forwarded != "" {
+		ips := strings.Split(forwarded, ",")
+		if len(ips) > 0 {
+			return strings.TrimSpace(ips[0])
+		}
+	}
+	
+	// Check X-Real-IP header
+	realIP := r.Header.Get("X-Real-IP")
+	if realIP != "" {
+		return realIP
+	}
+	
+	// Fall back to RemoteAddr
+	ip := r.RemoteAddr
+	if idx := strings.LastIndex(ip, ":"); idx != -1 {
+		ip = ip[:idx]
+	}
+	return ip
+}
+
 func main() {
 
     command := os.Args[1]
@@ -96,6 +200,17 @@ func main() {
         return
     }
 
+    // Initialize rate limiter with defaults if not set
+    maxRequests := config.RateLimitRequests
+    if maxRequests <= 0 {
+        maxRequests = 100 // Default: 100 requests per window
+    }
+    windowSeconds := config.RateLimitWindowSeconds
+    if windowSeconds <= 0 {
+        windowSeconds = 60 // Default: 60 seconds window
+    }
+    rateLimiter := NewRateLimiter(maxRequests, windowSeconds)
+
     getVirtualHostByServerName := func(serverName string) *FastHTTPVirtualHost {
         for i, v := range config.VirtualHosts {
           if v.ServerName == serverName {
@@ -108,6 +223,14 @@ func main() {
 	server := &http.Server{
 		Addr: ":" + config.HttpPort,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+			// Check rate limit
+			clientIP := getClientIP(r)
+			if !rateLimiter.Allow(clientIP) {
+				log.Printf("Rate limit exceeded for IP: %s", clientIP)
+				http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
+				return
+			}
 
 			log.Printf("Request from %s", r.RemoteAddr)
             log.Printf("Host: %s", html.EscapeString(r.Host))
@@ -155,7 +278,7 @@ func main() {
                     }
                }
 
-                log.Printf(currentUri)
+                log.Printf("URI: %s", currentUri)
                 log.Printf("isPHP: %t", isPHP)
 
                 if (isPHP && virtualHost.PHPProxyFCGI != "") {
