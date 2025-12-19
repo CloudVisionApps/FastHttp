@@ -20,13 +20,15 @@ func main() {
 	}
 
 	command := os.Args[1]
-	configFilePath := "/fast-http/fasthttp.json"
+	configFilePath := "fasthttp.json"
 
 	cfg, err := config.Load(configFilePath)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+
+	log.Printf("Configuration loaded successfully from %s", configFilePath)
 
 	switch command {
 	case "start":
